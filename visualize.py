@@ -17,25 +17,26 @@ def visualize_pallet_open3d(pallet, boxes):
     pallet_box.paint_uniform_color([0, 0, 0])  # 黑色线框
     geometries.append(pallet_box)
 
-    # 颜色字典（根据key映射）
-    import random
-    colors = [[random.random(), random.random(), random.random()] for _ in range(len(boxes))]
-    color_map = {}
-    unique_keys = list({box[6] for box in boxes})
-    for i, key in enumerate(unique_keys):
-        color_map[key] = colors[i]
+    # # 颜色字典（根据key映射）
+    # import random
+    # colors = [[random.random(), random.random(), random.random()] for _ in range(len(boxes))]
+    # color_map = {}
+    # unique_keys = list({box[6] for box in boxes})
+    # for i, key in enumerate(unique_keys):
+    #     color_map[key] = colors[i]
 
     for box in boxes:
         x, y, z, l, w, h, key = box
         mesh_box = o3d.geometry.TriangleMesh.create_box(width=l, height=w, depth=h)
         mesh_box.translate((x, y, z))
-        mesh_box.paint_uniform_color(color_map[key])
+        # mesh_box.paint_uniform_color(color_map[key])
+        mesh_box.paint_uniform_color([random.random(), random.random(), random.random()])
         geometries.append(mesh_box)
-
+    axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=min(pallet.l, pallet.w, pallet.h) * 0.2,origin=[0, 0, 0])
+    geometries.append(axis)
     o3d.visualization.draw_geometries(geometries)
 
-# 调用示例
-# visualize_pallet_open3d(pallet, placed_boxes)
+
 
 def visualize_pallet(pallet, boxes, save_path):
     fig = plt.figure()

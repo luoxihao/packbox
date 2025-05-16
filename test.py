@@ -1,8 +1,8 @@
 from dataclass import Pallet,Box
 from tqdm import tqdm
 import random
-from utils import compute_metrics
-from basepacker import Packer, EMSLBPacker, EMSMULPacker, EMSMACSPacker
+from utils import compute_metrics, VoxelCollisionChecker
+from basepacker import Packer, EMSLBPacker
 from sort import GreedyPacker, SearchPacker, GeneticPacker, SimulatedAnnealingPacker
 from visualize import  visualize_pallet ,visualize_pallet_open3d
 pallet = Pallet(1200, 1000, 1800)
@@ -42,33 +42,73 @@ boxes = [
     Box(250, 200, 500)     # 超小箱，6×4 或 5×5 满铺组合
 ]
 
+import wandb
 
-def Test_utils(boxes, algorithm_class, packer_class, rounds=1, low_box_num=40, high_box_num=80):
+
+def Test_utils(boxes, algorithm_class, packer_class, rounds=10, low_box_num=40, high_box_num=60):
     algo_name = algorithm_class.__name__
     packer_name = packer_class.__name__ if packer_class else 'None'
-    print(f"\n📦 测试组合: 算法 = {algo_name}, Packer = {packer_name}, Box数范围 = [{low_box_num}, {high_box_num}], 轮数 = {rounds}")
+    run_name = f"{algo_name}_{packer_name}_{low_box_num}_{high_box_num}"
+
+    # 初始化wandb运行
+    wandb.init(project="packing_project", name=run_name, reinit=True)
+    wandb.config.update({
+        "algorithm": algo_name,
+        "packer": packer_name,
+        "rounds": rounds,
+        "low_box_num": low_box_num,
+        "high_box_num": high_box_num,
+    })
 
     utils = []
     used_utils = []
+    un_packing_num = []
 
-    for _ in tqdm(range(rounds)):
+    for i in tqdm(range(rounds)):
         boxes_used = random.choices(boxes, k=random.randint(low_box_num, high_box_num))
         packer = algorithm_class(pallet, packer_class)
         placed_boxes, unplaced_boxes = packer.pack(boxes_used)
 
+        VCC = VoxelCollisionChecker()
+        VCC.add_cubes(placed_boxes)
+        if VCC.check_collision():
+            print("❌ 碰撞检测失败")
+            continue
+
         util, used_util, height = compute_metrics(pallet, placed_boxes)
         utils.append(util)
         used_utils.append(used_util)
-        # visualize_pallet(pallet,placed_boxes,"")
-        visualize_pallet_open3d(pallet,placed_boxes)
-    print(f"✅ 平均利用率: {sum(utils) / len(utils):.2f}")
-    print(f"✅ 平均实际堆叠区域利用率: {sum(used_utils) / len(used_utils):.2f}")
+        un_packing_num.append(len(unplaced_boxes))
+
+        # 每轮训练记录指标
+        wandb.log({
+            "round": i,
+            "utilization": util,
+            "used_utilization": used_util,
+            "unplaced_boxes": len(unplaced_boxes)
+        })
+
+    avg_util = sum(utils) / len(utils)
+    avg_used_util = sum(used_utils) / len(used_utils)
+    avg_unplaced = sum(un_packing_num) / len(un_packing_num)
+
+    # 记录平均指标
+    wandb.log({
+        "avg_utilization": avg_util,
+        "avg_used_utilization": avg_used_util,
+        "avg_unplaced_boxes": avg_unplaced
+    })
+    print(f"✅ 平均利用率: {avg_util:.2f}")
+    print(f"✅ 平均实际堆叠区域利用率: {avg_used_util:.2f}")
+    print(f"✅ 平均未放置数量: {avg_unplaced:.2f}")
+
+    wandb.finish()
 
 
 if __name__ == '__main__':
     Test_utils(boxes, GeneticPacker,Packer)
     Test_utils(boxes, GeneticPacker,EMSLBPacker)
-    
+
 
     Test_utils(boxes, SimulatedAnnealingPacker,Packer)
     Test_utils(boxes, SimulatedAnnealingPacker,EMSLBPacker)

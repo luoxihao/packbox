@@ -1,6 +1,6 @@
 
 import random
-from utils import does_collide
+from utils import check_available
 from dataclass import Box, Pallet
 import itertools
 import math
@@ -37,7 +37,7 @@ class SearchPacker:
                     bl, bw, bh = orientation
                     for i, (x, y, z) in enumerate(free_spaces):
                         if (x + bl <= self.pallet.l and y + bw <= self.pallet.w and z + bh <= self.pallet.h and
-                            not does_collide(x, y, z, bl, bw, bh, placed)):
+                            not check_available(x, y, z, bl, bw, bh, placed)):
                             placed.append((x, y, z, bl, bw, bh, box.key()))
                             free_spaces.append((x + bl, y, z))
                             free_spaces.append((x, y + bw, z))
