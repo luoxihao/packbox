@@ -4,7 +4,7 @@ from utils import check_available
 from dataclass import Box, Pallet
 import itertools
 import math
-
+from tqdm import tqdm
 
 class GreedyPacker:
     def __init__(self, pallet,packer):
@@ -82,35 +82,38 @@ class SearchPacker:
 
 
 
+import random
+from tqdm import tqdm
+from multiprocessing import cpu_count
+from concurrent.futures import ProcessPoolExecutor
+from dataclass import Pallet
+
+# 顶层函数（用于多进程并行评估）
+def fitness_wrapper(args):
+    order, packer_class, pallet_dim = args
+    pallet_tmp = Pallet(*pallet_dim)
+    packer = packer_class(pallet_tmp)
+    placed, _ = packer.pack(order)
+    if not placed:
+        return 0, placed
+
+    box_volume = sum(l * w * h for _, _, _, l, w, h, _ in placed)
+    max_height = max((z + h) for _, _, z, _, _, h, _ in placed)
+    used_volume = pallet_tmp.l * pallet_tmp.w * max_height
+
+    util = box_volume / used_volume
+    return util, placed
+
+
 class GeneticPacker:
-    def __init__(self, pallet, packer,population_size=100, generations=100, mutation_rate=0.2):
+    def __init__(self, pallet, packer, population_size=20, generations=50, mutation_rate=0.2):
         self.pallet = pallet
         self.population_size = population_size
         self.generations = generations
         self.mutation_rate = mutation_rate
-        self.packer  = packer
+        self.packer = packer  # 注意是 packer class，不是实例
 
     def pack(self, boxes):
-        def fitness(order):
-            pallet_tmp = Pallet(self.pallet.l, self.pallet.w, self.pallet.h)
-            packer = self.packer(pallet_tmp)
-            placed, _ = packer.pack(order)
-            if not placed:
-                return 0, placed
-
-            box_volume = sum(l * w * h for _, _, _, l, w, h, _ in placed)
-            max_height = max((z + h) for _, _, z, _, _, h, _ in placed)
-            total_volume = pallet_tmp.l * pallet_tmp.w * pallet_tmp.h
-            used_volume = pallet_tmp.l * pallet_tmp.w * max_height
-
-            util_overall = box_volume / total_volume
-            util_used = box_volume / used_volume
-
-            # 综合评分（可调节权重）
-            score =  util_used
-            return score, placed
-        
-
         def crossover(p1, p2):
             cut = random.randint(1, len(p1) - 2)
             child = p1[:cut] + [b for b in p2 if b not in p1[:cut]]
@@ -120,25 +123,28 @@ class GeneticPacker:
             a, b = random.sample(range(len(order)), 2)
             order[a], order[b] = order[b], order[a]
 
-        # 初始化种群，每个个体是 Box 实例的排列
         population = [random.sample(boxes, len(boxes)) for _ in range(self.population_size)]
         best_solution = []
         best_score = 0
         best_placed = []
 
-        for _ in range(self.generations):
-            scored = []
-            for ind in population:
-                vol, placed = fitness(ind)
-                scored.append((vol, placed, ind))
-            scored.sort(key=lambda x: x[0], reverse=True)
+        pallet_dim = (self.pallet.l, self.pallet.w, self.pallet.h)
 
-            if scored[0][0] > best_score:
-                best_score = scored[0][0]
-                best_placed = scored[0][1]
-                best_solution = scored[0][2]
+        for _ in tqdm(range(self.generations)):
+            args_list = [(ind, self.packer, pallet_dim) for ind in population]
 
-            parents = [ind for _, _, ind in scored[:self.population_size // 2]]
+            with ProcessPoolExecutor(max_workers=cpu_count()) as executor:
+                scored = list(executor.map(fitness_wrapper, args_list))
+
+            combined = list(zip(scored, population))  # [(fitness, placed), ind]
+            combined.sort(key=lambda x: x[0][0], reverse=True)
+
+            if combined[0][0][0] > best_score:
+                best_score = combined[0][0][0]
+                best_placed = combined[0][0][1]
+                best_solution = combined[0][1]
+
+            parents = [ind for (_, _), ind in combined[:self.population_size // 2]]
             next_gen = []
             while len(next_gen) < self.population_size:
                 p1, p2 = random.sample(parents, 2)
@@ -146,14 +152,15 @@ class GeneticPacker:
                 if random.random() < self.mutation_rate:
                     mutate(child)
                 next_gen.append(child)
+
             population = next_gen
 
-        # 最优个体重新打包
         final_pallet = Pallet(self.pallet.l, self.pallet.w, self.pallet.h)
         final_packer = self.packer(final_pallet)
         placed, unplaced = final_packer.pack(best_solution)
         self.pallet.boxes = placed
         return placed, unplaced
+
 
 class SimulatedAnnealingPacker:
     def __init__(self, pallet, packer,initial_temp=100000, final_temp=1, alpha=0.95, max_iter=500):
