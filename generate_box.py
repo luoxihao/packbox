@@ -2,7 +2,7 @@ import random
 from dataclass import Box,Pallet
 import json
 from sort import RandomPacker
-from basepacker import Packer,EMSLBPacker
+from basepacker import Packer,EMSLBPacker,BinPacker
 from utils import compute_metrics
 import math
 from tqdm import trange
@@ -20,6 +20,7 @@ class BoxGeneratorGA:
         self.pallet = Pallet(1200,1000,1800)
         self.packer = RandomPacker(self.pallet,Packer)
         self.emslbpacker = RandomPacker(self.pallet,Packer)
+        self.binpacker = RandomPacker(self.pallet,BinPacker)
 
     def generate_box(self):
         while True:
@@ -50,13 +51,17 @@ class BoxGeneratorGA:
             util, used_util, height = compute_metrics(self.pallet, placed)
             score += util + used_util
 
-        return score / 10
+            # placed, unplaced = self.binpacker.pack(group)
+            # score -= math.log(len(unplaced)+1)
+            # util, used_util, height = compute_metrics(self.pallet, placed)
+            # score += float(util) + float(used_util)
+        return score / (10*2)
 
     def crossover(self, parent1, parent2):
         point = self.num_boxes // 2
         return parent1[:point] + parent2[point:]
 
-    def mutate_box(self, box, delta_ratio=0.01):
+    def mutate_box(self, box, delta_ratio=0.1):
         def mutate_dim(dim):
             delta = int(dim * delta_ratio)
             delta = max(1, delta)
@@ -85,23 +90,27 @@ class BoxGeneratorGA:
     def evolve(self):
         best_score = float("-inf")
         best_individual = None
+        best_score_list = []
 
         for gen in trange(self.generations, desc="Evolving", ncols=80):
             self.population.sort(key=self.fitness, reverse=True)
             current_best = self.population[0]
             current_score = self.fitness(current_best)
 
-            # 更新全局最佳
+            # 更新 wandb
+            wandb.log({"generation": gen, "current_score": current_score})
+
+            best_score_list.append(current_score)
+
             if current_score > best_score:
                 best_score = current_score
                 best_individual = copy.deepcopy(current_best)
+                self.export_best_to_json(filepath=f"./best_individual/best_boxes{best_score:.2f}.json")
 
-            # 每 N 代打印一次
             if (gen + 1) % 50 == 0:
                 print(f"Generation {gen+1}, Best Fitness: {current_score:.4f}")
 
-            # 进化新一代
-            next_gen = self.population[:2]  # 精英保留
+            next_gen = self.population[:2]
             while len(next_gen) < self.pop_size:
                 p1, p2 = random.choices(self.population[:5], k=2)
                 child = self.crossover(p1, p2)
@@ -109,13 +118,13 @@ class BoxGeneratorGA:
                 next_gen.append(child)
             self.population = next_gen
 
-        # 保存最终最佳个体（给类内成员）
         self.best_individual = best_individual
         self.best_score = best_score
 
-        # 可选：自动导出
-        self.export_individual_to_json(best_individual, "best_overall_boxes.json")
-        print(f"\n✅ 最优个体保存完毕，最终 fitness = {best_score:.4f}")
+        # 可视化最终最优体积
+        wandb.log({"final_best_score": best_score})
+
+    # 导出
 
     def get_best_boxes(self):
         best = max(self.population, key=self.fitness)
@@ -139,11 +148,20 @@ class BoxGeneratorGA:
 
 
 if __name__ == "__main__":
+    import wandb
+    wandb.init(project="box_genetic_algorithm", name="GA_Run", config={
+    "num_boxes": 25,
+    "pop_size": 25,
+    "generations": 30000,
+    "dim_limit": (50, 1000),
+    "mutation_rate": 0.1,})
+
+
     # 实例化遗传算法
     ga = BoxGeneratorGA(
         num_boxes=25,
-        pop_size=10,
-        generations=3000,
+        pop_size=25,
+        generations=30000,
         dim_limit=(50, 1000),
         mutation_rate=0.1,
     )
@@ -156,3 +174,4 @@ if __name__ == "__main__":
 
     # 导出为 JSON 文件
     ga.export_best_to_json("best_boxes.json")
+    wandb.finish()
