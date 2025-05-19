@@ -3,7 +3,7 @@ from tqdm import tqdm
 import random
 from utils import compute_metrics, VoxelCollisionChecker
 from basepacker import Packer, EMSLBPacker
-from sort import GreedyPacker, SearchPacker, GeneticPacker, SimulatedAnnealingPacker
+from sort import GreedyPacker, SearchPacker, GeneticPacker, SimulatedAnnealingPacker,RandomPacker
 from visualize import  visualize_pallet ,visualize_pallet_open3d
 pallet = Pallet(1200, 1000, 1800)
 
@@ -45,7 +45,7 @@ boxes = [
 import wandb
 
 
-def Test_utils(boxes, algorithm_class, packer_class, rounds=10, low_box_num=40, high_box_num=60):
+def Test_utils(boxes, algorithm_class, packer_class, rounds=1, low_box_num=40, high_box_num=60):
     algo_name = algorithm_class.__name__
     packer_name = packer_class.__name__ if packer_class else 'None'
     run_name = f"{algo_name}_{packer_name}_{low_box_num}_{high_box_num}"
@@ -65,7 +65,8 @@ def Test_utils(boxes, algorithm_class, packer_class, rounds=10, low_box_num=40, 
     un_packing_num = []
 
     for i in tqdm(range(rounds)):
-        boxes_used = random.choices(boxes, k=random.randint(low_box_num, high_box_num))
+        # boxes_used = random.choices(boxes, k=random.randint(low_box_num, high_box_num))
+        boxes_used = boxes
         packer = algorithm_class(pallet, packer_class)
         placed_boxes, unplaced_boxes = packer.pack(boxes_used)
 
@@ -87,7 +88,7 @@ def Test_utils(boxes, algorithm_class, packer_class, rounds=10, low_box_num=40, 
             "used_utilization": used_util,
             "unplaced_boxes": len(unplaced_boxes)
         })
-
+    visualize_pallet_open3d(pallet, placed_boxes)
     avg_util = sum(utils) / len(utils)
     avg_used_util = sum(used_utils) / len(used_utils)
     avg_unplaced = sum(un_packing_num) / len(un_packing_num)
@@ -106,6 +107,9 @@ def Test_utils(boxes, algorithm_class, packer_class, rounds=10, low_box_num=40, 
 
 
 if __name__ == '__main__':
+    Test_utils(boxes, RandomPacker,Packer)
+    Test_utils(boxes, RandomPacker,EMSLBPacker)
+    
     Test_utils(boxes, GeneticPacker,Packer)
     Test_utils(boxes, GeneticPacker,EMSLBPacker)
 
@@ -115,6 +119,8 @@ if __name__ == '__main__':
 
     Test_utils(boxes, GreedyPacker,Packer)
     Test_utils(boxes, GreedyPacker,EMSLBPacker)
+
+
     
     # Test_utils(boxes, SearchPacker,None,rounds=1000,low_box_num=5,high_box_num=10)
 

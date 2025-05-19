@@ -14,6 +14,13 @@ class GreedyPacker:
         boxes = sorted(boxes, key=lambda b: b.l * b.w * b.h, reverse=True)
         return self.packer.pack(boxes)
 
+class RandomPacker:
+    def __init__(self, pallet,packer):
+        self.pallet = pallet
+        self.packer  = packer(pallet)
+    def pack(self, boxes):
+        random.shuffle(boxes)
+        return self.packer.pack(boxes)
 
 class SearchPacker:
     def __init__(self, pallet, packer = None):
