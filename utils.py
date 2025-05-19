@@ -1,6 +1,14 @@
 import open3d as o3d
 
 from numba import njit, prange
+import json
+from dataclass import Box  # 你自己的 Box 类路径
+
+def load_boxes_from_json(filepath):
+    with open(filepath, 'r') as f:
+        data = json.load(f)
+    boxes = [Box(item['l'], item['w'], item['h']) for item in data]
+    return boxes
 
 class VoxelCollisionChecker:
     def __init__(self, voxel_size=1):

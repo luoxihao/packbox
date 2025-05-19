@@ -1,8 +1,8 @@
 from dataclass import Pallet,Box
 from tqdm import tqdm
 import random
-from utils import compute_metrics, VoxelCollisionChecker
-from basepacker import Packer, EMSLBPacker
+from utils import compute_metrics, VoxelCollisionChecker,load_boxes_from_json   
+from basepacker import Packer, EMSLBPacker, BinPacker
 from sort import GreedyPacker, SearchPacker, GeneticPacker, SimulatedAnnealingPacker,RandomPacker
 from visualize import  visualize_pallet ,visualize_pallet_open3d
 pallet = Pallet(1200, 1000, 1800)
@@ -42,23 +42,23 @@ boxes = [
     Box(250, 200, 500)     # 超小箱，6×4 或 5×5 满铺组合
 ]
 
-import wandb
+# import wandb
 
 
-def Test_utils(boxes, algorithm_class, packer_class, rounds=1, low_box_num=40, high_box_num=60):
+def Test_utils(boxes, algorithm_class, packer_class, rounds=10, low_box_num=40, high_box_num=60):
     algo_name = algorithm_class.__name__
     packer_name = packer_class.__name__ if packer_class else 'None'
     run_name = f"{algo_name}_{packer_name}_{low_box_num}_{high_box_num}"
-
+    print(f"开始测试 {run_name}")
     # 初始化wandb运行
-    wandb.init(project="packing_project", name=run_name, reinit=True)
-    wandb.config.update({
-        "algorithm": algo_name,
-        "packer": packer_name,
-        "rounds": rounds,
-        "low_box_num": low_box_num,
-        "high_box_num": high_box_num,
-    })
+    # wandb.init(project="packing_project", name=run_name, reinit=True)
+    # wandb.config.update({
+    #     "algorithm": algo_name,
+    #     "packer": packer_name,
+    #     "rounds": rounds,
+    #     "low_box_num": low_box_num,
+    #     "high_box_num": high_box_num,
+    # })
 
     utils = []
     used_utils = []
@@ -82,45 +82,50 @@ def Test_utils(boxes, algorithm_class, packer_class, rounds=1, low_box_num=40, h
         un_packing_num.append(len(unplaced_boxes))
 
         # 每轮训练记录指标
-        wandb.log({
-            "round": i,
-            "utilization": util,
-            "used_utilization": used_util,
-            "unplaced_boxes": len(unplaced_boxes)
-        })
-    visualize_pallet_open3d(pallet, placed_boxes)
+        # wandb.log({
+        #     "round": i,
+        #     "utilization": util,
+        #     "used_utilization": used_util,
+        #     "unplaced_boxes": len(unplaced_boxes)
+        # })
+    # visualize_pallet_open3d(pallet, placed_boxes)
     avg_util = sum(utils) / len(utils)
     avg_used_util = sum(used_utils) / len(used_utils)
     avg_unplaced = sum(un_packing_num) / len(un_packing_num)
 
     # 记录平均指标
-    wandb.log({
-        "avg_utilization": avg_util,
-        "avg_used_utilization": avg_used_util,
-        "avg_unplaced_boxes": avg_unplaced
-    })
+    # wandb.log({
+    #     "avg_utilization": avg_util,
+    #     "avg_used_utilization": avg_used_util,
+    #     "avg_unplaced_boxes": avg_unplaced
+    # })
     print(f"✅ 平均利用率: {avg_util:.2f}")
     print(f"✅ 平均实际堆叠区域利用率: {avg_used_util:.2f}")
     print(f"✅ 平均未放置数量: {avg_unplaced:.2f}")
 
-    wandb.finish()
+    # wandb.finish()
 
 
 if __name__ == '__main__':
-    Test_utils(boxes, RandomPacker,Packer)
-    Test_utils(boxes, RandomPacker,EMSLBPacker)
+    boxes = load_boxes_from_json("best_boxes.json")
+    # Test_utils(boxes, RandomPacker,Packer)
+    # Test_utils(boxes, RandomPacker,EMSLBPacker)
     
-    Test_utils(boxes, GeneticPacker,Packer)
-    Test_utils(boxes, GeneticPacker,EMSLBPacker)
+    # Test_utils(boxes, GeneticPacker,Packer)
+    # Test_utils(boxes, GeneticPacker,EMSLBPacker)
 
 
-    Test_utils(boxes, SimulatedAnnealingPacker,Packer)
-    Test_utils(boxes, SimulatedAnnealingPacker,EMSLBPacker)
+    # Test_utils(boxes, SimulatedAnnealingPacker,Packer)
+    # Test_utils(boxes, SimulatedAnnealingPacker,EMSLBPacker)
 
-    Test_utils(boxes, GreedyPacker,Packer)
-    Test_utils(boxes, GreedyPacker,EMSLBPacker)
+    # Test_utils(boxes, GreedyPacker,Packer)
+    # Test_utils(boxes, GreedyPacker,EMSLBPacker)
 
+    # Test_utils(boxes, RandomPacker,BinPacker)
 
+    Test_utils(boxes,GeneticPacker,BinPacker)
+
+    Test_utils(boxes, SimulatedAnnealingPacker,BinPacker)
     
     # Test_utils(boxes, SearchPacker,None,rounds=1000,low_box_num=5,high_box_num=10)
 

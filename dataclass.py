@@ -10,6 +10,9 @@ class Box:
     def key(self):
         return (self.l, self.w, self.h)
 
+    def volume(self):
+        return self.l * self.w * self.h
+
 
 # ------------------------------
 # Pallet 类

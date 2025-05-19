@@ -1,5 +1,77 @@
 from utils import check_available, split_ems,merge_ems
 from visualize import visualize_pallet_open3d
+import random
+from bin_packing.py3dbp import Packer, Bin, Item, Painter
+binpacker = Packer
+from decimal import Decimal
+class BinPacker:
+    def __init__(self, pallet):
+        self.pallet = pallet
+        self.box = Bin(
+        partno='example0',
+        WHD=(pallet.l,pallet.w,pallet.h),
+        max_weight=9e10,
+        corner=0,
+        put_type=2#顶部开孔的容器 托盘
+        )
+        self.id = 0
+        self.packer = binpacker()
+        self.packer.addBin(self.box)
+    def pack(self, boxes):
+        for box in boxes:
+            self.packer.addItem(self._box2item(box))
+        self.packer.pack(
+            bigger_first=True,
+            distribute_items=False,
+            fix_point=True, # Try switching fix_point=True/False to compare the results
+            check_stable=True,
+            support_surface_ratio=0.75,
+            number_of_decimals=0
+        )
+        
+        placed=[]
+        unplaced = []
+
+        for bin in self.packer.bins:
+            for item in bin.items:
+                
+                placed.append((item.position[0],
+                                item.position[1],
+                                item.position[2],
+                                item.getDimension()[0],
+                                item.getDimension()[1],
+                                item.getDimension()[2],
+                                (item.width,item.height,item.depth)
+                                ))
+            for item in bin.unfitted_items:
+                unplaced.append((item.position[0],
+                                item.position[1],
+                                item.position[2],
+                                item.getDimension()[0],
+                                item.getDimension()[1],
+                                item.getDimension()[2],
+                                (item.width,item.height,item.depth)
+                                ))
+        return placed, unplaced
+
+
+    def _box2item(self, box):
+        def random_color():
+            return "#{:06X}".format(random.randint(0, 0xFFFFFF))
+        
+        item=Item(
+            partno='id:{}'.format(str(self.id)),
+            name='box',
+            typeof='cube',
+            WHD=(box.l, box.w, box.h), 
+            weight=1,
+            level=1,
+            loadbear=1e10,
+            updown=True,
+            color=random_color()
+        )
+        self.id+=1
+        return item
 class Packer:
     def __init__(self, pallet):
         self.pallet = pallet
