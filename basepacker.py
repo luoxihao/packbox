@@ -90,10 +90,16 @@ class Packer:
                         check_available(x, y, z, bl, bw, bh, placed)):
                         placed.append((x, y, z, bl, bw, bh, box.key()))
                         # self.pallet.boxes.append((x, y, z, bl, bw, bh, box.key()))
+                        # 添加新空间
                         free_spaces.append((x + bl, y, z))
                         free_spaces.append((x, y + bw, z))
                         free_spaces.append((x, y, z + bh))
+
+                        # 删除当前已用空间
                         del free_spaces[i]
+
+                        # 按 z升 y升 x升 排序（小优先）
+                        free_spaces.sort(key=lambda pos: (pos[2], pos[1], pos[0]))
                         placed_flag = True
                         break
                 if placed_flag:

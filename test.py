@@ -6,7 +6,7 @@ from dataclass import Pallet,Box
 from tqdm import tqdm
 import random
 from utils import compute_metrics, VoxelCollisionChecker,load_boxes_from_json   
-from basepacker import Packer, EMSLBPacker, BinPacker
+from basepacker import Packer, BinPacker
 from sort import GreedyPacker, SearchPacker, GeneticPacker, SimulatedAnnealingPacker,RandomPacker
 from visualize import  visualize_pallet ,visualize_pallet_open3d
 pallet = Pallet(1200, 1000, 1800)
@@ -51,7 +51,7 @@ pallet = Pallet(1200, 1000, 1800)
 
 # import numpy as np  # 需导入
 
-def Test_utils(boxes, algorithm_class, packer_class, rounds=100, low_box_num=40, high_box_num=60):
+def Test_utils(boxes, algorithm_class, packer_class, rounds=100, low_box_num=15, high_box_num=15):
     algo_name = algorithm_class.__name__
     packer_name = packer_class.__name__ if packer_class else 'None'
     run_name = f"{algo_name}_{packer_name}_{low_box_num}_{high_box_num}"
@@ -77,7 +77,7 @@ def Test_utils(boxes, algorithm_class, packer_class, rounds=100, low_box_num=40,
         utils.append(util)
         used_utils.append(used_util)
         un_packing_num.append(len(unplaced_boxes))
-        visualize_pallet_open3d(pallet, placed_boxes)
+        # visualize_pallet_open3d(pallet, placed_boxes)
     utils_np = np.array(utils)
     used_utils_np = np.array(used_utils)
 
@@ -91,8 +91,6 @@ def Test_utils(boxes, algorithm_class, packer_class, rounds=100, low_box_num=40,
 
     print(f"\n📊 利用率：最大值: {utils_np.max():.2f}, 最小值: {utils_np.min():.2f}, 标准差: {utils_np.std(ddof=1):.2f}")
     print(f"📊 实际堆叠区域利用率：最大值: {used_utils_np.max():.2f}, 最小值: {used_utils_np.min():.2f}, 标准差: {used_utils_np.std(ddof=1):.2f}")
-
-
     print("\n📈 补充统计信息：")
 
     # 中位数
@@ -117,12 +115,14 @@ def Test_utils(boxes, algorithm_class, packer_class, rounds=100, low_box_num=40,
 
 
 if __name__ == '__main__':
-    boxes = load_boxes_from_json("./binery7_best_individual/best_boxes0.9825.json")
-    rounds = 1
+    boxes = load_boxes_from_json("./binery6_best_individual/best_boxes0.8669.json")
+    rounds = 100
     Test_utils(boxes, RandomPacker,Packer,rounds=rounds)
-    Test_utils(boxes, RandomPacker,EMSLBPacker,rounds=rounds)
     Test_utils(boxes, RandomPacker,BinPacker,rounds=rounds)
-    
+
+    Test_utils(boxes, GreedyPacker,Packer,rounds=rounds)
+    Test_utils(boxes, GreedyPacker,BinPacker,rounds = rounds)
+
     # Test_utils(boxes, GeneticPacker,Packer)
     # Test_utils(boxes, GeneticPacker,EMSLBPacker)
 
@@ -130,13 +130,9 @@ if __name__ == '__main__':
     # Test_utils(boxes, SimulatedAnnealingPacker,Packer)
     # Test_utils(boxes, SimulatedAnnealingPacker,EMSLBPacker)
 
-    Test_utils(boxes, GreedyPacker,Packer,rounds=rounds)
-    Test_utils(boxes, GreedyPacker,EMSLBPacker,rounds=rounds)
-    Test_utils(boxes, GreedyPacker,BinPacker,rounds = rounds)
 
     # Test_utils(boxes,GeneticPacker,BinPacker)
 
     # Test_utils(boxes, SimulatedAnnealingPacker,BinPacker)
     
-    # Test_utils(boxes, SearchPacker,None,rounds=1000,low_box_num=5,high_box_num=10)
 

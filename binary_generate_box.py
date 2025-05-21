@@ -5,40 +5,37 @@ import copy
 import os
 from dataclass import Box, Pallet
 from sort import RandomPacker
-from basepacker import Packer, EMSLBPacker, BinPacker
+from basepacker import Packer, BinPacker
 from utils import compute_metrics
 from tqdm import trange
 from concurrent.futures import ProcessPoolExecutor
 import wandb
 import multiprocessing
-
-
-def binary_to_dim(binary_str):
-    return int(binary_str, 2) * 10 + 10
-
-
-def dim_to_binary(dim, bit_length):
-    return format((dim - 10) // 10, f'0{bit_length}b')
-
+from collections import defaultdict
 
 def fitness_wrapper(args):
     group_dims, pallet_dim, eval_times = args
-    group = [Box(l, w, h) for l, w, h in group_dims]  # 重建箱子，减少序列化开销
+    group = [Box(l, w, h) for l, w, h in group_dims]
     pallet = Pallet(*pallet_dim)
-    log_group_size = math.log(len(group))  # 提前计算，减少重复计算
-
+    # log_group_size = math.log(len(group))
     score = 0
     penalty_sum = 0
+
     for _ in range(eval_times):
+        packer = RandomPacker(pallet, Packer)
         binpacker = RandomPacker(pallet, BinPacker)
-        placed, unplaced = binpacker.pack(group)
-        penalty = math.log(len(unplaced) + 1) / log_group_size
-        penalty_sum += penalty
+        used_box = random.choices(group, k=random.randint(20, 20))
+
+        placed, unplaced = packer.pack(used_box)
         util, used_util, _ = compute_metrics(pallet, placed)
         score += float(used_util)
 
-    return score / eval_times, penalty_sum / eval_times
+        placed, unplaced = binpacker.pack(used_box)
+        util, used_util, _ = compute_metrics(pallet, placed)
+        score += float(used_util)
 
+
+    return score / (eval_times * 2), penalty_sum / (eval_times * 2)
 
 class BoxGeneratorGA:
     def __init__(self, config):
@@ -51,128 +48,93 @@ class BoxGeneratorGA:
         self.export_threshold = config.get('export_threshold', 0.7)
         self.eval_times = config.get('eval_times', 10)
         self.bit_length = config.get('bit_length', 6)
-
-        # 预计算有效尺寸组合，避免拒绝采样
-        self.valid_dims = [10 + i * 10 for i in range(2 ** self.bit_length)]
+        self.min_dim = config.get('min_dim', 10)
+        self.max_dim = config.get('max_dim', 500)
+        self.valid_dims = [
+            d for d in (10 + i * 10 for i in range(2 ** self.bit_length))
+            if self.min_dim <= d <= self.max_dim
+        ]
         self.valid_dim_pairs = [
             (l, w, h) for l in self.valid_dims for w in self.valid_dims for h in self.valid_dims
-            if max(l, w, h) / min(l, w, h) <= 5
+            # if max(l, w, h) / min(l, w, h) <= 5
         ]
+        if not self.valid_dim_pairs:
+            raise ValueError("\u26a0\ufe0f No valid box dimensions under constraints")
+
+        self.l_fixed = defaultdict(list)
+        self.w_fixed = defaultdict(list)
+        self.h_fixed = defaultdict(list)
+        for l, w, h in self.valid_dim_pairs:
+            self.l_fixed[(w, h)].append((l, w, h))
+            self.w_fixed[(l, h)].append((l, w, h))
+            self.h_fixed[(l, w)].append((l, w, h))
 
         self.population = self.init_population()
         self.pallet = Pallet(1200, 1000, 1800)
-        self.fitness_cache = {}  # 适应度缓存：{group_tuple: (score, penalty)}
 
     def generate_box(self):
-        # 直接从预计算的尺寸组合中采样
         l, w, h = random.choice(self.valid_dim_pairs)
         return Box(l, w, h)
 
     def init_population(self):
-        return [
-            [self.generate_box() for _ in range(self.num_boxes)]
-            for _ in range(self.pop_size)
-        ]
+        return [[self.generate_box() for _ in range(self.num_boxes)] for _ in range(self.pop_size)]
 
     def crossover(self, parent1, parent2):
         point = self.num_boxes // 2
         return parent1[:point] + parent2[point:]
 
     def mutate_box(self, box):
-        if random.random() >= self.mutation_rate:
-            return box
         choice = random.choice(['l', 'w', 'h'])
-
-        # 找到有效变异，扰动一个维度
-        valid_mutations = [
-            (l, w, h) for l, w, h in self.valid_dim_pairs
-            if (choice == 'l' and w == box.w and h == box.h) or
-               (choice == 'w' and l == box.l and h == box.h) or
-               (choice == 'h' and l == box.l and w == box.w)
-        ]
-
-        if not valid_mutations:
+        if choice == 'l':
+            candidates = self.l_fixed.get((box.w, box.h), [])
+        elif choice == 'w':
+            candidates = self.w_fixed.get((box.l, box.h), [])
+        else:
+            candidates = self.h_fixed.get((box.l, box.w), [])
+        if not candidates:
             return box
-        new_l, new_w, new_h = random.choice(valid_mutations)
-        return Box(new_l, new_w, new_h)
+        return Box(*random.choice(candidates))
 
     def mutate(self, group):
         return [
-            self.mutate_box(box) if random.random() < self.mutation_rate else box
-            for box in group
-        ]
+            self.mutate_box(box) if random.random() < self.mutation_rate else box for box in group]
 
     def evolve(self):
         best_score = float("-inf")
         best_individual = None
         pallet_dim = (self.pallet.l, self.pallet.w, self.pallet.h)
         max_workers = min(10, multiprocessing.cpu_count())
-
-        for gen in trange(self.generations, desc="进化中", ncols=80):
-            fitness_scores = []
-            uncached_groups = []
-            group_to_tuple = []
-
-            # 收集需要计算的 group
-            for group in self.population:
-                group_tuple = tuple((b.l, b.w, b.h) for b in group)
-                if group_tuple in self.fitness_cache:
-                    fitness_scores.append(self.fitness_cache[group_tuple])
-                else:
-                    group_to_tuple.append(group_tuple)
-                    uncached_groups.append(group)
-
-            # 并行计算新 group 的适应度
-            if uncached_groups:
-                args_list = [([(b.l, b.w, b.h) for b in group], pallet_dim, self.eval_times) for group in
-                             uncached_groups]
-                with ProcessPoolExecutor(max_workers=max_workers) as executor:
-                    new_scores = list(executor.map(fitness_wrapper, args_list))
-                for group_tuple, score in zip(group_to_tuple, new_scores):
-                    self.fitness_cache[group_tuple] = score
-
-            # 汇总所有 group 的 score（按 self.population 顺序）
-            fitness_scores.clear()
-            for group in self.population:
-                group_tuple = tuple((b.l, b.w, b.h) for b in group)
-                fitness_scores.append(self.fitness_cache[group_tuple])
-
-            # 解包评分并排序
+        for gen in trange(self.generations, desc="\u8fdb\u5316\u4e2d", ncols=80):
+            args_list = [([(b.l, b.w, b.h) for b in group], pallet_dim, self.eval_times) for group in self.population]
+            with ProcessPoolExecutor(max_workers=max_workers) as executor:
+                fitness_scores = list(executor.map(fitness_wrapper, args_list))
             scores, penalties = zip(*fitness_scores)
             scored_population = list(zip(scores, penalties, self.population))
             scored_population.sort(key=lambda x: x[0], reverse=True)
-
             self.population = [ind for _, _, ind in scored_population]
             current_best = self.population[0]
             current_score = scored_population[0][0]
             current_penalty = scored_population[0][1]
-
-            # wandb 日志
-            wandb.log({
-                "generation": gen,
-                "current_score": current_score,
-                "current_penalty": current_penalty,
-            })
-
-            # 导出最佳个体
+            wandb.log({"generation": gen, "current_score": current_score, "current_penalty": current_penalty})
             if current_score > best_score and current_score > self.export_threshold:
                 best_score = current_score
                 best_individual = copy.deepcopy(current_best)
                 self.export_best_to_json(
                     filepath=f"./binery{self.bit_length}_best_individual/best_boxes{best_score:.4f}.json")
-
             if (gen + 1) % 50 == 0:
                 print(f"Generation {gen + 1}, Best Fitness: {current_score:.4f}")
-
-            # 精英保留 + 交叉变异
             next_gen = self.population[:self.elite_size]
-            while len(next_gen) < self.pop_size:
-                p1, p2 = random.choices(self.population[:self.elite_size], k=2)
+            num_random = max(1, self.pop_size // 10)
+            num_offspring = self.pop_size - self.elite_size - num_random
+            for _ in range(num_offspring):
+                p1, p2 = random.choices(self.population[:max(10, self.elite_size * 5)], k=2)
                 child = self.crossover(p1, p2)
                 child = self.mutate(child)
                 next_gen.append(child)
+            for _ in range(num_random):
+                new_ind = [self.generate_box() for _ in range(self.num_boxes)]
+                next_gen.append(new_ind)
             self.population = next_gen
-
         self.best_individual = best_individual
         self.best_score = best_score
         wandb.log({"final_best_score": best_score})
@@ -180,34 +142,9 @@ class BoxGeneratorGA:
     def get_best_boxes(self):
         pallet_dim = (self.pallet.l, self.pallet.w, self.pallet.h)
         max_workers = min(10, multiprocessing.cpu_count())
-
-        fitness_scores = []
-        uncached_groups = []
-        group_to_tuple = []
-
-        # 筛选需要评估的 group
-        for group in self.population:
-            group_tuple = tuple((b.l, b.w, b.h) for b in group)
-            if group_tuple in self.fitness_cache:
-                fitness_scores.append(self.fitness_cache[group_tuple])
-            else:
-                group_to_tuple.append(group_tuple)
-                uncached_groups.append(group)
-
-        # 计算未缓存 group 的适应度
-        if uncached_groups:
-            args_list = [([(b.l, b.w, b.h) for b in group], pallet_dim, self.eval_times) for group in uncached_groups]
-            with ProcessPoolExecutor(max_workers=max_workers) as executor:
-                new_scores = list(executor.map(fitness_wrapper, args_list))
-            for group_tuple, score in zip(group_to_tuple, new_scores):
-                self.fitness_cache[group_tuple] = score
-
-        # 汇总所有适应度
-        fitness_scores.clear()
-        for group in self.population:
-            group_tuple = tuple((b.l, b.w, b.h) for b in group)
-            fitness_scores.append(self.fitness_cache[group_tuple])
-
+        args_list = [([(b.l, b.w, b.h) for b in group], pallet_dim, self.eval_times) for group in self.population]
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            fitness_scores = list(executor.map(fitness_wrapper, args_list))
         scores, _ = zip(*fitness_scores)
         best_idx = scores.index(max(scores))
         return self.population[best_idx]
@@ -216,34 +153,31 @@ class BoxGeneratorGA:
         boxes = self.get_best_boxes()
         print("\nBest 25 Boxes:")
         for i, box in enumerate(boxes):
-            print(f"{i + 1:02d}: {box.l} × {box.w} × {box.h} mm")
+            print(f"{i + 1:02d}: {box.l} \u00d7 {box.w} \u00d7 {box.h} mm")
 
     def export_best_to_json(self, filepath="best_boxes.json"):
         boxes = self.get_best_boxes()
         box_list = [{"l": box.l, "w": box.w, "h": box.h} for box in boxes]
-
         dir_path = os.path.dirname(filepath)
         if dir_path and not os.path.exists(dir_path):
             os.makedirs(dir_path)
-
         with open(filepath, "w") as f:
             json.dump(box_list, f, indent=2)
-
-        print(f"✅ 导出成功：{filepath}")
-
+        print(f"\u2705 \u5bfc\u51fa\u6210\u529f\uff1a{filepath}")
 
 if __name__ == "__main__":
     config = {
         "num_boxes": 25,
-        "pop_size": 20,
-        "generations": 30000,
+        "pop_size": 4000,
+        "generations": 400,
         "mutation_rate": 0.2,
-        "elite_size": 2,
+        "elite_size": 5,
         "export_threshold": 0.8,
         "eval_times": 5,
-        "bit_length": 7
+        "bit_length": 6,
+        "min_dim": 100,
+        "max_dim": 800
     }
-
     wandb.init(project="box_genetic_algorithm", name="GA_BinaryEncoded", config=config)
     ga = BoxGeneratorGA(config)
     ga.evolve()

@@ -277,9 +277,24 @@ def merge_ems(ems_list):
     return ems_list
 
 
-def compute_metrics(pallet, boxes):
+def compute_metrics(pallet, placed):
     total_volume = pallet.l * pallet.w * pallet.h
-    box_volume = sum(l * w * h for _, _, _, l, w, h, _ in boxes)
-    max_height = max((z + h) for _, _, z, _, _, h, _ in boxes) if boxes else 0
-    used_volume = max_height * pallet.l * pallet.w
-    return box_volume / total_volume, box_volume / used_volume, max_height
+    if total_volume == 0:
+        return 0.0, 0.0, 0.0
+
+    box_volume = 0.0
+    max_height = 0.0
+
+    for x, y, z, l, w, h, _ in placed:
+        v = l * w * h
+        box_volume += float(v)
+        max_height = float(max(max_height, z + h))
+
+    pallet_util = box_volume / total_volume
+
+    base_area = pallet.l * pallet.w
+    used_volume = base_area * max_height if max_height > 0 else 1  # 避免除 0
+    used_util = box_volume / used_volume
+
+    return pallet_util, used_util, max_height
+
