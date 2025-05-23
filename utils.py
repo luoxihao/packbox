@@ -4,6 +4,35 @@ from numba import njit, prange
 import json
 from dataclass import Box  # 你自己的 Box 类路径
 
+from sklearn.cluster import KMeans
+
+
+def cluster_boxes(boxes, n_clusters=3):
+    """
+    对boxes列表进行聚类分组
+
+    Args:
+        boxes (list[Box]): Box对象列表
+        n_clusters (int): 聚类簇数量
+
+    Returns:
+        list[list[Box]]: 二维列表，内层列表为同一簇的Box对象集合
+    """
+    # 转成特征矩阵 (n, 3)
+    X = np.array([[box.l, box.w, box.h] for box in boxes])
+
+    # 聚类
+    kmeans = KMeans(n_clusters=n_clusters, random_state=0)
+    labels = kmeans.fit_predict(X)
+
+    # 根据标签分组
+    clusters = [[] for _ in range(n_clusters)]
+    for box, label in zip(boxes, labels):
+        clusters[label].append(box)
+
+    return clusters
+
+
 def load_boxes_from_json(filepath):
     with open(filepath, 'r') as f:
         data = json.load(f)
