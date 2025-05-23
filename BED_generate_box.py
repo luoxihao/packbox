@@ -85,6 +85,7 @@ class BoxGeneratorGA:
         self.min_dim = config.get('min_dim', 150)
         self.max_dim = config.get('max_dim', 1000)
         self.step = config.get('step', 10)
+        self.CR = config.get('CR', 0.7)
         self.dim_to_bin_str, self.bin_str_to_dim = create_dim_converters(self.min_dim, self.step, self.bit_length)
         self.name = (
             f"numBoxes{self.num_boxes}_pop{self.pop_size}_"
@@ -119,7 +120,8 @@ class BoxGeneratorGA:
     def init_population(self):
         return [[self.generate_box() for _ in range(self.num_boxes)] for _ in range(self.pop_size)]
 
-    def crossover(self, target, population, CR=0.7):
+    def crossover(self, target, population):
+        CR = self.CR
         indices = list(range(len(population)))
         indices.remove(population.index(target))
         a, b, c = random.sample(indices, 3)
@@ -214,7 +216,7 @@ class BoxGeneratorGA:
                 self.best_individual = copy.deepcopy(current_best)
                 # 生成name字符串（同wandb的命名规则）
 
-                filepath = f"./{self.name}/bestBoxes{best_score:.4f}.json"
+                filepath = f"./{self.name}/{gen}bestBoxes{best_score:.4f}.json"
                 self.export_best_to_json(filepath=filepath)
             if (gen + 1) % 50 == 0:
                 print(f"Generation {gen + 1}, Best Fitness: {current_score:.4f}")
@@ -254,33 +256,35 @@ class BoxGeneratorGA:
         print(f"✅ 导出成功：{filepath}")
 
 if __name__ == "__main__":
-    for i in range(10, 25 + 1):
-        config = {
-            "num_boxes": i,
-            "pop_size": 10000,
-            "generations": 100,
-            "mutation_rate": 0.2,
-            "elite_size": 100,
-            "export_threshold": 0.1,
-            "eval_times": 5,
-            "bit_length": 7,
-            "min_dim": 150,
-            "max_dim": 800,
-            "step": 10
-        }
-        name = (
-            f"numBoxes{config['num_boxes']}_pop{config['pop_size']}_"
-            f"mut{config['mutation_rate']}_"
-            f"bitLen{config['bit_length']}_minDim{config['min_dim']}_"
-            f"maxDim{config['max_dim']}_step{config['step']}"
-        )
-        wandb.init(
-            project="box_genetic_algorithm",
-            name=name,
-            config=config
-        )
+    for rate in [0.05,0.1,0.15,0.2]:
+        for CR in [0.3,0.4,0.5,0.6,0.7]:
+            config = {
+                "num_boxes": 10,
+                "pop_size": 100,
+                "generations": 60,
+                "mutation_rate": rate,
+                "export_threshold": 0.1,
+                "CR": CR,
+                "eval_times": 10,
+                "bit_length": 7,
+                "min_dim": 150,
+                "max_dim": 800,
+                "step": 10
+            }
+            config["elite_size"] = int(0.1 * config["pop_size"])
+            name = (
+                f"numBoxes{config['num_boxes']}_pop{config['pop_size']}_"
+                f"mut{config['mutation_rate']}_"
+                f"bitLen{config['bit_length']}_minDim{config['min_dim']}_"
+                f"maxDim{config['max_dim']}_step{config['step']}"
+            )
+            wandb.init(
+                project="debug_parameters_box_genetic_algorithm",
+                name=name,
+                config=config
+            )
 
-        ga = BoxGeneratorGA(config)
-        ga.evolve()
-        ga.print_best_boxes()
-        wandb.finish()
+            ga = BoxGeneratorGA(config)
+            ga.evolve()
+            ga.print_best_boxes()
+            wandb.finish()
