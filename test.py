@@ -27,6 +27,7 @@ def Test_utils(boxes, algorithm_class, packer_class, rounds=100, low_box_num=20,
         else:
             boxes_used = boxes
         random.shuffle(boxes_used)
+
         packer = algorithm_class(pallet, packer_class)
         placed_boxes, unplaced_boxes = packer.pack(boxes_used)
 
@@ -56,24 +57,24 @@ def Test_utils(boxes, algorithm_class, packer_class, rounds=100, low_box_num=20,
     print(f"✅ 平均利用率:               {avg_util:.4f}")
     print(f"✅ 平均实际堆叠区域利用率:     {avg_used_util:.4f}")
     print(f"✅ 平均未放置数量:             {avg_unplaced:.4f}")
-    print()
-    print(f"📊 利用率：最大值: {utils_np.max():.4f}  最小值: {utils_np.min():.4f}  标准差: {utils_np.std(ddof=1):.4f}")
-    print(
-        f"📊 实际堆叠区域利用率：最大值: {used_utils_np.max():.4f}  最小值: {used_utils_np.min():.4f}  标准差: {used_utils_np.std(ddof=1):.4f}")
-    print()
-    print(f"🔸 利用率 95%置信区间:         {avg_util:.4f} ± {conf_interval_util:.4f}")
-    print(f"🔸 实际利用率 95%置信区间:      {avg_used_util:.4f} ± {conf_interval_used_util:.4f}")
+    # print()
+    # print(f"📊 利用率：最大值: {utils_np.max():.4f}  最小值: {utils_np.min():.4f}  标准差: {utils_np.std(ddof=1):.4f}")
+    # print(
+    #     f"📊 实际堆叠区域利用率：最大值: {used_utils_np.max():.4f}  最小值: {used_utils_np.min():.4f}  标准差: {used_utils_np.std(ddof=1):.4f}")
+    # print()
+    # print(f"🔸 利用率 95%置信区间:         {avg_util:.4f} ± {conf_interval_util:.4f}")
+    # print(f"🔸 实际利用率 95%置信区间:      {avg_used_util:.4f} ± {conf_interval_used_util:.4f}")
 
 
 if __name__ == '__main__':
-    boxes = load_boxes_from_json("./numBoxes10_pop10000_mut0.2_bitLen7_minDim150_maxDim800_step100/bestBoxes0.5664.json")
-    rounds = 2
+    boxes = load_boxes_from_json(
+        "./numBoxes25_pop50_mut0.15_bitLen6_minDim150_maxDim800_step100/97bestBoxes0.5884.json")
+    rounds = 5
     is_random = False
     boxes = cluster_boxes(boxes, n_clusters=1)
-    print(len(boxes))
     for used_boxes in boxes:
-        Test_utils(used_boxes, RandomPacker,Packer,rounds=rounds,is_random=is_random)
-
+        # Test_utils(used_boxes, RandomPacker,Packer,rounds=rounds,is_random=is_random)
+        Test_utils(used_boxes, RandomPacker,BinPacker,rounds=rounds,is_random=is_random)
 
 
     # Test_utils(boxes, RandomPacker,Packer,rounds=rounds)

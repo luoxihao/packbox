@@ -26,37 +26,38 @@ def create_dim_converters(min_dim: int, step: int, bit_length: int):
     return dim_to_bin_str, bin_str_to_dim
 
 def fitness_wrapper(args):
-    group_dims, pallet_dim, eval_times, min_dim, step = args
+    group_dims, pallet_dim, eval_times, min_dim, step, bit_length = args
     group = [Box(l, w, h) for l, w, h in group_dims]
     pallet = Pallet(*pallet_dim)
     score = 0
-    penalty_sum = 0
 
-    def compute_entropy(dim_values):
-        counts = np.bincount(dim_values, minlength=128)
-        probs = counts / np.sum(counts)
-        probs = probs[probs > 0]
-        entropy = -np.sum(probs * np.log2(probs)) if probs.size > 0 else 0
-        return entropy
+    # 参数，最高k位参与熵计算，建议1~3
+    k = 1
+    weight = 0.15  # 奖励权重，调节熵的影响力度
 
-    all_dims = []
+    # 先提取长宽最大值对应的编码（0~2^bit_length-1）
+    def encode_dim(d):
+        return (d - min_dim) // step
+
+    max_lw_dims = []
     for box in group:
-        if box.l >= min_dim:
-            all_dims.append((box.l - min_dim) // step)
-        if box.w >= min_dim:
-            all_dims.append((box.w - min_dim) // step)
-        if box.h >= min_dim:
-            all_dims.append((box.h - min_dim) // step)
+        l_enc = encode_dim(box.l)
+        w_enc = encode_dim(box.w)
+        max_lw_dims.append(max(l_enc, w_enc))
 
-    entropy_all = compute_entropy(all_dims)
+    # 提取最高k位
+    topkbits = [ (dim >> (bit_length - k)) for dim in max_lw_dims ]
 
-    avg_entropy = entropy_all
+    # 计算熵
+    counts = np.bincount(topkbits, minlength=2**k)
+    probs = counts / np.sum(counts)
+    probs = probs[probs > 0]
+    entropy = -np.sum(probs * np.log2(probs)) if probs.size > 0 else 0
 
-    max_entropy = np.log2(2 ** 7)  # 7位编码对应128个值
-    target_entropy = max_entropy * 0.7
-    entropy_penalty = 0.1 * abs(avg_entropy - target_entropy)
-    penalty_sum += entropy_penalty
+    max_entropy = np.log2(2**k)
+    entropy_reward = weight * (entropy / max_entropy)
 
+    # 包装利用率打分
     for _ in range(eval_times):
         packer = RandomPacker(pallet, Packer)
         used_box = group.copy()
@@ -66,8 +67,10 @@ def fitness_wrapper(args):
         _, used_util, _ = compute_metrics(pallet, placed)
         score += float(used_util)
 
-    final_score = (score / (eval_times)) - penalty_sum
-    return max(final_score, 0), penalty_sum
+    final_score = (score / eval_times) + entropy_reward
+    return max(final_score, 0), -entropy_reward  # 返回负值作为penalty保持接口一致
+
+
 
 class BoxGeneratorGA:
     def __init__(self, config):
@@ -200,7 +203,9 @@ class BoxGeneratorGA:
         pallet_dim = (self.pallet.l, self.pallet.w, self.pallet.h)
         max_workers = min(10, multiprocessing.cpu_count())
         for gen in trange(self.generations, desc="进化中", ncols=80):
-            args_list = [([(b.l, b.w, b.h) for b in group], pallet_dim, self.eval_times, self.min_dim, self.step) for group in self.population]
+            args_list = [([(b.l, b.w, b.h) for b in group],
+                        pallet_dim, self.eval_times, self.min_dim, self.step,self.bit_length) for group in self.population]
+
             with ProcessPoolExecutor(max_workers=max_workers) as executor:
                 fitness_scores = list(executor.map(fitness_wrapper, args_list))
             scores, penalties = zip(*fitness_scores)
@@ -210,7 +215,10 @@ class BoxGeneratorGA:
             current_best = self.population[0]
             current_score = scored_population[0][0]
             current_penalty = scored_population[0][1]
-            wandb.log({"generation": gen, "current_score": current_score, "current_penalty": current_penalty})
+            wandb.log({"generation": gen,
+                    "current_true_score": current_score+current_penalty,
+                    "current_penalty": current_penalty,
+                    "current_score":current_score})
             if current_score > best_score and current_score > self.export_threshold:
                 best_score = current_score
                 self.best_individual = copy.deepcopy(current_best)
@@ -256,35 +264,40 @@ class BoxGeneratorGA:
         print(f"✅ 导出成功：{filepath}")
 
 if __name__ == "__main__":
-    for rate in [0.05,0.1,0.15,0.2]:
-        for CR in [0.3,0.4,0.5,0.6,0.7]:
-            config = {
-                "num_boxes": 10,
-                "pop_size": 100,
-                "generations": 60,
-                "mutation_rate": rate,
-                "export_threshold": 0.1,
-                "CR": CR,
-                "eval_times": 10,
-                "bit_length": 7,
-                "min_dim": 150,
-                "max_dim": 800,
-                "step": 10
-            }
-            config["elite_size"] = int(0.1 * config["pop_size"])
-            name = (
-                f"numBoxes{config['num_boxes']}_pop{config['pop_size']}_"
-                f"mut{config['mutation_rate']}_"
-                f"bitLen{config['bit_length']}_minDim{config['min_dim']}_"
-                f"maxDim{config['max_dim']}_step{config['step']}"
-            )
-            wandb.init(
-                project="debug_parameters_box_genetic_algorithm",
-                name=name,
-                config=config
-            )
+    #mut 0.15 CR 0.085 box 10
+    #mut 0.15 CR 0.1 box 25
+    #mut 0.14 CR 0.07 box 50
 
-            ga = BoxGeneratorGA(config)
-            ga.evolve()
-            ga.print_best_boxes()
-            wandb.finish()
+    config = {
+        "num_boxes": 25,
+        "pop_size": 5000,
+        "generations": 100,
+        "mutation_rate": 0.15,
+        "export_threshold": 0.1,
+        "CR": 0.1,
+        "eval_times": 100,
+        "bit_length": 6,
+        "min_dim": 150,
+        "max_dim": 800,
+        "step": 10
+    }
+    config["elite_size"] = int(0.1 * config["pop_size"])
+    name = (
+        f"debug_numBoxes{config['num_boxes']}_pop{config['pop_size']}_"
+        f"mut{config['mutation_rate']}_CR{config['CR']}"
+        f"bitLen{config['bit_length']}_minDim{config['min_dim']}_"
+        f"maxDim{config['max_dim']}_step{config['step']}"
+    )
+    # name = (
+    #     f"mut{config['mutation_rate']}_CR{config['CR']}"
+    # )
+    wandb.init(
+        project=f"debug_{config['bit_length']}_eval{config['eval_times']}_step{config['step']}",
+        name=name,
+        config=config
+    )
+
+    ga = BoxGeneratorGA(config)
+    ga.evolve()
+    ga.print_best_boxes()
+    wandb.finish()
