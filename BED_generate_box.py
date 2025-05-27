@@ -102,7 +102,7 @@ class BoxGeneratorGA:
         ]
         self.valid_dim_pairs = [
             (l, w, h) for l in self.valid_dims for w in self.valid_dims for h in self.valid_dims
-            if h <= l and h <= w
+            if h <= max(l,w)
         ]
         if not self.valid_dim_pairs:
             raise ValueError("⚠️ No valid box dimensions under constraints")
