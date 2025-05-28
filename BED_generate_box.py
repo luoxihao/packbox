@@ -341,49 +341,98 @@ class BoxGeneratorGA:
 
 
 if __name__ == "__main__":
-    config = {
-        "num_boxes": 2,
-        "pallet": (1600, 1000, 1800),
-        "pop_size": 50,
-        "generations": 100,
-        "mutation_rate": 0.15,
-        "export_threshold": 0.1,
-        "CR": 0.1,
-        "eval_times": 100,
-        "bit_length_lw": 6,
-        "step_lw": 10,
-        "min_lw": 500,
-        "max_lw": 1000,
-        "bit_length_h": 6,
-        "step_h": 10,
-        "min_h": 500,
-        "max_h": 1000
-    }
-    config["elite_size"] = int(0.1 * config["pop_size"])
-    name = (
-        f"lwBL{config['bit_length_lw']}s{config['step_lw']}_"
-        f"hBL{config['bit_length_h']}s{config['step_h']}"
-    )
+    box_nums = [2,5,8,11,14,17,20,23]
+    # box_nums = [2]
+    for num in box_nums:
+        dir = str(num)
+        config = None
+        for filename in os.listdir(dir):
+            if filename =='config.json':
+                full_path = os.path.join(dir, filename)
+                with open(full_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    config = data
+                    # print(data)
+        config['pop_size']=10
+        config["elite_size"] = int(0.1 * config["pop_size"])
+        name = (
+            f"{config['num_boxes']}boxes_"
+            f"lwBL{config['bit_length_lw']}s{config['step_lw']}_"
+            f"hBL{config['bit_length_h']}s{config['step_h']}"
+        )
+        config["name"] = name
+        wandb.init(
+            project=f"generate_boxes",
+            name=name,
+            config=config
+        )
 
-    config["name"] = name
-    wandb.init(
-        project=f"generate_boxes",
-        name=name,
-        config=config
-    )
+        ga = BoxGeneratorGA(config)
+        ga.evolve()
+        ga.print_best_boxes()
+        wandb.finish()
 
-    ga = BoxGeneratorGA(config)
-    ga.evolve()
-    ga.print_best_boxes()
-    wandb.finish()
-
-    from group_test import BatchBoxTester
+        from group_test import BatchBoxTester
 
 
-    pallet = Pallet(*config['pallet'])
-    folder = f"./{config['num_boxes']}"  # 请替换为你的json目录
+        pallet = Pallet(*config['pallet'])
+        folder = f"./{config['num_boxes']}"  # 请替换为你的json目录
 
-    tester = BatchBoxTester(pallet, folder, rounds=1000, is_random=False)
-    results = tester.batch_test()
-    tester.save_to_csv()
+        tester = BatchBoxTester(pallet, folder, rounds=1000, is_random=False)
+        results = tester.batch_test()
+        tester.save_to_csv()
+
+
+
+
+
+
+
+
+
+    # config = {
+    #     "num_boxes": 2,
+    #     "pallet": (1600, 1000, 1800),
+    #     "pop_size": 50,
+    #     "generations": 100,
+    #     "mutation_rate": 0.15,
+    #     "export_threshold": 0.1,
+    #     "CR": 0.1,
+    #     "eval_times": 100,
+    #     "bit_length_lw": 6,
+    #     "step_lw": 10,
+    #     "min_lw": 500,
+    #     "max_lw": 1000,
+    #     "bit_length_h": 6,
+    #     "step_h": 10,
+    #     "min_h": 500,
+    #     "max_h": 1000
+    # }
+    # config["elite_size"] = int(0.1 * config["pop_size"])
+    # name = (
+    #     f"lwBL{config['bit_length_lw']}s{config['step_lw']}_"
+    #     f"hBL{config['bit_length_h']}s{config['step_h']}"
+    # )
+    #
+    # config["name"] = name
+    # wandb.init(
+    #     project=f"generate_boxes",
+    #     name=name,
+    #     config=config
+    # )
+    #
+    # ga = BoxGeneratorGA(config)
+    # ga.evolve()
+    # ga.print_best_boxes()
+    # wandb.finish()
+    #
+    # from group_test import BatchBoxTester
+    #
+    #
+    # pallet = Pallet(*config['pallet'])
+    # folder = f"./{config['num_boxes']}"  # 请替换为你的json目录
+    #
+    # tester = BatchBoxTester(pallet, folder, rounds=1000, is_random=False)
+    # results = tester.batch_test()
+    # tester.save_to_csv()
 
