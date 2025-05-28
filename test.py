@@ -70,13 +70,13 @@ if __name__ == '__main__':
     # "./numBoxes25_pop5000_mut0.15_bitLen6_minDim150_maxDim800_step100/55bestBoxes0.7013.json"
     #  "./numBoxes25_pop5000_mut0.15_bitLen6_minDim150_maxDim800_step100/61bestBoxes0.7130.json"
     boxes = load_boxes_from_json(
-        "./numBoxes25_pop5000_mut0.15_bitLen6_minDim150_maxDim800_step100/97bestBoxes0.8274.json")
+        "./nb25_pop50_mut0.15_CR0.1_lwBL5s10_hBL3s40/68bestBoxes0.8899.json")
     rounds = 5
     is_random = False
     boxes = cluster_boxes(boxes, n_clusters=1)
     for used_boxes in boxes:
-        Test_utils(used_boxes, RandomPacker,Packer,rounds=rounds,is_random=is_random)
-        # Test_utils(used_boxes, RandomPacker,BinPacker,rounds=rounds,is_random=is_random)
+        # Test_utils(used_boxes, RandomPacker,Packer,rounds=rounds,is_random=is_random)
+        Test_utils(used_boxes, RandomPacker,BinPacker,rounds=rounds,is_random=is_random)
 
 
     # Test_utils(boxes, RandomPacker,Packer,rounds=rounds)
