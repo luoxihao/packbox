@@ -37,53 +37,71 @@ def fitness_wrapper(args):
     score = 0
 
     k = 1  # 取最高1位进行熵计算，必要时可调
-    weight_lw = 0.15  # 长宽熵奖励权重
-    weight_h = 0.1    # 高度熵奖励权重，略小可调节
+    weight_lw = 0.5  # 长宽熵奖励权重
+    weight_h = 0.5    # 高度熵奖励权重
 
-    def encode_dim_lw(d):
-        return (d - min_lw) // step_lw
+    # 定义编码函数（长宽取最大，编码离散等级）
+    def encode_dim_lw(box):
+        return (max(box.l, box.w) - min_lw) // step_lw
 
-    def encode_dim_h(d):
-        return (d - min_h) // step_h
+    def encode_dim_h(box):
+        return (box.h - min_h) // step_h
 
-    # 长宽最大值编码
-    max_lw_dims = []
-    for box in group:
-        l_enc = encode_dim_lw(box.l)
-        w_enc = encode_dim_lw(box.w)
-        max_lw_dims.append(max(l_enc, w_enc))
-    topkbits_lw = [(dim >> (bit_length_lw - k)) for dim in max_lw_dims]
+    # 计算长宽熵奖励
+    encoded_lw = [encode_dim_lw(box) for box in group]
+    topkbits_lw = [(dim >> (bit_length_lw - k)) for dim in encoded_lw]
     counts_lw = np.bincount(topkbits_lw, minlength=2**k)
-    probs_lw = counts_lw / np.sum(counts_lw)
+    probs_lw = counts_lw / np.sum(counts_lw) if np.sum(counts_lw) > 0 else np.array([1])
     probs_lw = probs_lw[probs_lw > 0]
     entropy_lw = -np.sum(probs_lw * np.log2(probs_lw)) if probs_lw.size > 0 else 0
     max_entropy_lw = np.log2(2**k)
-    entropy_reward_lw = weight_lw * (entropy_lw / max_entropy_lw)
+    entropy_reward_lw = weight_lw * (entropy_lw / max_entropy_lw if max_entropy_lw > 0 else 0)
 
-    # 高度编码
-    h_dims = [encode_dim_h(box.h) for box in group]
-    topkbits_h = [(dim >> (bit_length_h - k)) for dim in h_dims]
+    # 计算高度熵奖励
+    encoded_h = [encode_dim_h(box) for box in group]
+    topkbits_h = [(dim >> (bit_length_h - k)) for dim in encoded_h]
     counts_h = np.bincount(topkbits_h, minlength=2**k)
-    probs_h = counts_h / np.sum(counts_h)
+    probs_h = counts_h / np.sum(counts_h) if np.sum(counts_h) > 0 else np.array([1])
     probs_h = probs_h[probs_h > 0]
     entropy_h = -np.sum(probs_h * np.log2(probs_h)) if probs_h.size > 0 else 0
     max_entropy_h = np.log2(2**k)
-    entropy_reward_h = weight_h * (entropy_h / max_entropy_h)
+    entropy_reward_h = weight_h * (entropy_h / max_entropy_h if max_entropy_h > 0 else 0)
 
-    # 总熵奖励
-    entropy_reward = entropy_reward_lw + entropy_reward_h
+    entropy_reward = entropy_reward_lw + entropy_reward_h  # 总熵奖励
 
+    # 统计长宽最大值和最小值均相等的箱子对数，作为惩罚依据
+    lw_swap_pairs = 0
+    group_len = len(group)
+    for i in range(group_len):
+        for j in range(i + 1, group_len):
+            box_i = group[i]
+            box_j = group[j]
+
+            max_i, min_i = max(box_i.l, box_i.w), min(box_i.l, box_i.w)
+            max_j, min_j = max(box_j.l, box_j.w), min(box_j.l, box_j.w)
+
+            if max_i == max_j and min_i == min_j:
+                lw_swap_pairs += 1
+
+    penalty_weight_swap = 0.2  # 惩罚权重，可调节
+    penalty_swap = penalty_weight_swap * lw_swap_pairs
+
+    # 计算装箱利用率及未放箱惩罚
     for _ in range(eval_times):
         packer = RandomPacker(pallet, Packer)
         used_box = group.copy()
         random.shuffle(used_box)
 
-        placed, _ = packer.pack(used_box)
+        placed, unplaced = packer.pack(used_box)
+        score -= len(unplaced)  # 未放箱子数量惩罚
         _, used_util, _ = compute_metrics(pallet, placed)
-        score += float(used_util)
+        score += float(used_util)  # 利用率奖励
 
-    final_score = (score / eval_times) + entropy_reward
-    return max(final_score, 0), -entropy_reward
+    avg_score = score / eval_times
+    final_score = avg_score + entropy_reward - penalty_swap
+
+    return max(final_score, 0), -entropy_reward + penalty_swap
+
 
 
 
@@ -131,7 +149,7 @@ class BoxGeneratorGA:
             raise ValueError("⚠️ No valid box dimensions under constraints")
 
         self.population = self.init_population()
-        self.pallet = Pallet(1600, 1000, 4000)
+        self.pallet = Pallet(*config['pallet'])
 
         self.CR = config.get('CR', 0.7)  # 交叉概率
 
@@ -243,7 +261,6 @@ class BoxGeneratorGA:
 
     def evolve(self):
         best_score = float("-inf")
-        best_individual = None
         pallet_dim = (self.pallet.l, self.pallet.w, self.pallet.h)
         max_workers = min(10, multiprocessing.cpu_count())
         for gen in trange(self.generations, desc="进化中", ncols=80):
@@ -274,7 +291,7 @@ class BoxGeneratorGA:
                 best_score = current_score
                 self.best_individual = copy.deepcopy(current_best)
 
-                filepath = f"./{self.name}/{gen}bestBoxes{best_score:.4f}.json"
+                filepath = f"./{self.num_boxes}/{gen}bestBoxes{best_score:.4f}.json"
                 self.export_best_to_json(filepath=filepath)
             if (gen + 1) % 50 == 0:
                 print(f"Generation {gen + 1}, Best Fitness: {current_score:.4f}")
@@ -293,6 +310,7 @@ class BoxGeneratorGA:
         self.best_score = best_score
         wandb.log({"final_best_score": best_score})
 
+
     def print_best_boxes(self):
         boxes = self.best_individual
         if boxes is None:
@@ -301,7 +319,7 @@ class BoxGeneratorGA:
         for i, box in enumerate(boxes):
             print(f"{i + 1:02d}: {box.l} \u00d7 {box.w} \u00d7 {box.h} mm")
 
-    def export_best_to_json(self, filepath="best_boxes.json"):
+    def export_best_to_json(self, filepath="best_boxes.json", save_config=True):
         boxes = self.best_individual
         if boxes is None:
             return
@@ -313,36 +331,43 @@ class BoxGeneratorGA:
             json.dump(box_list, f, indent=2)
         print(f"✅ 导出成功：{filepath}")
 
+        # 同路径保存config.json，若文件已存在则不覆盖
+        if self.config is not None and save_config:
+            config_path = os.path.join(dir_path, "config.json")
+            if not os.path.exists(config_path):
+                with open(config_path, "w", encoding="utf-8") as cf:
+                    json.dump(self.config, cf, indent=2, ensure_ascii=False)
+                print(f"✅ 配置文件已保存：{config_path}")
+
 
 if __name__ == "__main__":
     config = {
-        "num_boxes": 25,
+        "num_boxes": 2,
+        "pallet": (1600, 1000, 1800),
         "pop_size": 50,
         "generations": 100,
         "mutation_rate": 0.15,
         "export_threshold": 0.1,
         "CR": 0.1,
         "eval_times": 100,
-        "bit_length_lw": 5,
+        "bit_length_lw": 6,
         "step_lw": 10,
-        "min_lw": 150,
-        "max_lw": 500,
-        "bit_length_h": 3,
-        "step_h": 40,
-        "min_h": 150,
-        "max_h": 430
+        "min_lw": 500,
+        "max_lw": 1000,
+        "bit_length_h": 6,
+        "step_h": 10,
+        "min_h": 500,
+        "max_h": 1000
     }
     config["elite_size"] = int(0.1 * config["pop_size"])
     name = (
-        f"nb{config['num_boxes']}_pop{config['pop_size']}_"
-        f"mut{config['mutation_rate']}_CR{config['CR']}_"
         f"lwBL{config['bit_length_lw']}s{config['step_lw']}_"
         f"hBL{config['bit_length_h']}s{config['step_h']}"
     )
 
     config["name"] = name
     wandb.init(
-        project=f"debug_{config['bit_length_lw']}_eval{config['eval_times']}_step{config['step_lw']}",
+        project=f"generate_boxes",
         name=name,
         config=config
     )
@@ -351,3 +376,14 @@ if __name__ == "__main__":
     ga.evolve()
     ga.print_best_boxes()
     wandb.finish()
+
+    from group_test import BatchBoxTester
+
+
+    pallet = Pallet(*config['pallet'])
+    folder = f"./{config['num_boxes']}"  # 请替换为你的json目录
+
+    tester = BatchBoxTester(pallet, folder, rounds=1000, is_random=False)
+    results = tester.batch_test()
+    tester.save_to_csv()
+

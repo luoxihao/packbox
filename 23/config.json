@@ -1,0 +1,24 @@
+{
+  "num_boxes": 23,
+  "pallet": [
+    1600,
+    1000,
+    1800
+  ],
+  "pop_size": 50,
+  "generations": 100,
+  "mutation_rate": 0.15,
+  "export_threshold": 0.1,
+  "CR": 0.1,
+  "eval_times": 100,
+  "bit_length_lw": 5,
+  "step_lw": 10,
+  "min_lw": 150,
+  "max_lw": 500,
+  "bit_length_h": 3,
+  "step_h": 40,
+  "min_h": 150,
+  "max_h": 430,
+  "elite_size": 5,
+  "name": "lwBL5s10_hBL3s40"
+}
