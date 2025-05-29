@@ -327,3 +327,28 @@ def compute_metrics(pallet, placed):
 
     return pallet_util, used_util, max_height
 
+import csv
+def save_boxes_to_csv(boxes, csv_filename):
+    # 写入 CSV 文件
+    with open(csv_filename, mode='w', newline='', encoding='utf-8') as csvfile:
+        fieldnames = ['l', 'w', 'h']  # CSV 文件的列名
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+        writer.writeheader()  # 写入表头
+
+        # 写入每个 Box 对象的属性到 CSV
+        for box in boxes:
+            writer.writerow({'l': box.l, 'w': box.w, 'h': box.h})
+
+if __name__ == "__main__":
+    # 示例路径
+    json_filepath = "./result/23_0.5651_0.6733.json"  # 请替换为实际的 JSON 文件路径
+    csv_filepath = './result/23_0.5651_0.6733.csv'  # 请替换为你希望输出的 CSV 文件路径
+
+    # 读取 JSON 文件并转换为 Box 对象列表
+    boxes = load_boxes_from_json(json_filepath)
+
+    # 保存为 CSV 文件
+    save_boxes_to_csv(boxes, csv_filepath)
+
+    print(f"✅ 数据已保存至 {csv_filepath}")
