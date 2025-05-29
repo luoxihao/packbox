@@ -353,7 +353,7 @@ if __name__ == "__main__":
                     data = json.load(f)
                     config = data
                     # print(data)
-        config['pop_size']=10
+        config['pop_size']=2500
         config["elite_size"] = int(0.1 * config["pop_size"])
         name = (
             f"{config['num_boxes']}boxes_"
