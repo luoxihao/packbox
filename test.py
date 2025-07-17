@@ -77,7 +77,7 @@ if __name__ == '__main__':
     # "./numBoxes25_pop5000_mut0.15_bitLen6_minDim150_maxDim800_step100/55bestBoxes0.7013.json"
     #  "./numBoxes25_pop5000_mut0.15_bitLen6_minDim150_maxDim800_step100/61bestBoxes0.7130.json"
     boxes = load_boxes_from_json(
-        "./result/14_0.6231_9.61.json")
+        "./result/2_0.8881_0.8881.json")
     rounds = 1
     is_random = False
     boxes = cluster_boxes(boxes, n_clusters=1)

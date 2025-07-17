@@ -28,7 +28,9 @@ class Box:
 
     def z_top(self):
         return self.z + self.h
-
+    def set_center(self, cx, cy):
+        self.x = cx - self.l / 2.0
+        self.y = cy - self.w / 2.0
     def xy_overlap(self, other):
         """判断两个箱子在 xy 平面是否有重叠"""
         ax1, ax2 = self.x_range()
