@@ -1,7 +1,7 @@
 import numpy as np
 from numpy import percentile
 from scipy.stats import sem
-
+import csv
 from dataclass import Pallet,Box
 from tqdm import tqdm
 import random
@@ -31,6 +31,7 @@ def Test_utils(boxes, algorithm_class, packer_class, rounds=100, low_box_num=20,
         packer = algorithm_class(pallet, packer_class)
         placed_boxes, unplaced_boxes = packer.pack(boxes_used)
 
+        save_packed_box(placed_boxes)
         # VCC = VoxelCollisionChecker()
         # VCC.add_cubes(placed_boxes)
         # if VCC.check_collision():
@@ -65,13 +66,19 @@ def Test_utils(boxes, algorithm_class, packer_class, rounds=100, low_box_num=20,
     # print(f"🔸 利用率 95%置信区间:         {avg_util:.4f} ± {conf_interval_util:.4f}")
     # print(f"🔸 实际利用率 95%置信区间:      {avg_used_util:.4f} ± {conf_interval_used_util:.4f}")
 
+def save_packed_box(boxes):
+    with open("packed_boxes.csv", "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["uid", "x", "y", "z", "l", "w", "h"])
+        for uid, row in enumerate(boxes):
+            writer.writerow([uid] + list(row[:6]))
 
 if __name__ == '__main__':
     # "./numBoxes25_pop5000_mut0.15_bitLen6_minDim150_maxDim800_step100/55bestBoxes0.7013.json"
     #  "./numBoxes25_pop5000_mut0.15_bitLen6_minDim150_maxDim800_step100/61bestBoxes0.7130.json"
     boxes = load_boxes_from_json(
-        "./5/best_best42bestBoxes1.8313.json")
-    rounds = 5
+        "./result/14_0.6231_9.61.json")
+    rounds = 1
     is_random = False
     boxes = cluster_boxes(boxes, n_clusters=1)
     for used_boxes in boxes:

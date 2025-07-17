@@ -2,38 +2,84 @@ import random
 from matplotlib import pyplot as plt
 import matplotlib.colors as mcolors
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-
-
-
 import open3d as o3d
 
-def visualize_pallet_open3d(pallet, boxes):
+
+import hashlib
+
+def uid_to_rgb(uid,epsilon=0.03):
+    """将uid哈希为RGB颜色（范围0-1）"""
+    uid_bytes = str(uid).encode('utf-8')
+    digest = hashlib.md5(uid_bytes).hexdigest()
+    r = int(digest[0:2], 16) / 255.0
+    g = int(digest[2:4], 16) / 255.0
+    b = int(digest[4:6], 16) / 255.0
+    # 添加微小扰动，确保不超过 [0, 1]
+    r = min(max(r + random.uniform(-epsilon, epsilon), 0.0), 1.0)
+    g = min(max(g + random.uniform(-epsilon, epsilon), 0.0), 1.0)
+    b = min(max(b + random.uniform(-epsilon, epsilon), 0.0), 1.0)
+    return (0, g, b)
+
+import open3d as o3d
+import random
+
+def visualize_pallet_open3d(pallet, boxes, accessible_boxes_uid=None, suctions=None):
     geometries = []
 
-    # 创建托盘边界框（透明线框）
+    # 1. 托盘线框
     pallet_box = o3d.geometry.LineSet.create_from_axis_aligned_bounding_box(
-        o3d.geometry.AxisAlignedBoundingBox(min_bound=(0,0,0), max_bound=(pallet.l, pallet.w, pallet.h))
+        o3d.geometry.AxisAlignedBoundingBox(min_bound=(0, 0, 0), max_bound=(pallet.l, pallet.w, pallet.h))
     )
-    pallet_box.paint_uniform_color([0, 0, 0])  # 黑色线框
+    pallet_box.paint_uniform_color([0, 0, 0])
     geometries.append(pallet_box)
 
-    # # 颜色字典（根据key映射）
-    # import random
-    # colors = [[random.random(), random.random(), random.random()] for _ in range(len(boxes))]
-    # color_map = {}
-    # unique_keys = list({box[6] for box in boxes})
-    # for i, key in enumerate(unique_keys):
-    #     color_map[key] = colors[i]
-
+    # 2. 箱子及其线框
     for box in boxes:
-        x, y, z, l, w, h, key = box
+        x, y, z, l, w, h, uid = box
         mesh_box = o3d.geometry.TriangleMesh.create_box(width=l, height=w, depth=h)
         mesh_box.translate((x, y, z))
-        # mesh_box.paint_uniform_color(color_map[key])
-        mesh_box.paint_uniform_color([random.random(), random.random(), random.random()])
+
+        # 着色逻辑
+        if accessible_boxes_uid and uid in accessible_boxes_uid:
+            mesh_box.paint_uniform_color([
+                1.0,
+                min(max(random.uniform(-0.3, 0.3), 0.0), 1.0),
+                min(max(random.uniform(-0.3, 0.3), 0.0), 1.0)
+            ])
+        else:
+            mesh_box.paint_uniform_color(uid_to_rgb(uid))  # 哈希色
+
         geometries.append(mesh_box)
-    axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=min(pallet.l, pallet.w, pallet.h) * 0.2,origin=[0, 0, 0])
+
+        # 加线框
+        bbox = mesh_box.get_axis_aligned_bounding_box()
+        lineset = o3d.geometry.LineSet.create_from_axis_aligned_bounding_box(bbox)
+        lineset.paint_uniform_color([0.2, 0.2, 0.2])  # 深灰色边框
+        geometries.append(lineset)
+
+    # 3. 吸盘（可选）
+    if suctions:
+        for suction in suctions:
+            x, y, z, l, w, h, uid = suction
+            mesh_box = o3d.geometry.TriangleMesh.create_box(width=l, height=w, depth=h)
+            mesh_box.translate((x, y, z))
+            mesh_box.paint_uniform_color([0.5, 0.5, 0.5])  # 灰色
+
+            geometries.append(mesh_box)
+
+            # 吸盘线框
+            bbox = mesh_box.get_axis_aligned_bounding_box()
+            lineset = o3d.geometry.LineSet.create_from_axis_aligned_bounding_box(bbox)
+            lineset.paint_uniform_color([0.1, 0.1, 0.1])  # 更深的边框色
+            geometries.append(lineset)
+
+    # 4. 坐标系
+    axis = o3d.geometry.TriangleMesh.create_coordinate_frame(
+        size=min(pallet.l, pallet.w, pallet.h) * 0.2, origin=[0, 0, 0]
+    )
     geometries.append(axis)
+
+    # 5. 显示
     o3d.visualization.draw_geometries(geometries)
 
 
