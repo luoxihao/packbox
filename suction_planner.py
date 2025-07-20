@@ -105,8 +105,17 @@ class SuctionPlanner:
                     return suction
 
         return None
-
-    def run(self, csv_path: str):
+    def get_accessible_target(self,boxes):
+        accessibles, uids = self.find_accessible_boxes(boxes)
+        suctions = []
+        targets = []
+        for accessible in accessibles:
+            suction = self.find_suction_position(accessible, boxes)
+            if suction:
+                suctions.append(suction)
+                targets.append(accessible)
+        return suctions,targets
+    def run_demo(self, csv_path: str):
         boxes = self.load_boxes_from_csv(csv_path)
         while boxes:
             accessibles, uids = self.find_accessible_boxes(boxes)
@@ -135,5 +144,5 @@ if __name__ == "__main__":
     pallet = Pallet(1600, 1000, 1800)
     suction_template = Box(800, 600, 1)
     planner = SuctionPlanner(pallet, suction_template)
-    planner.run("./packed_boxes.csv")
+    planner.run_demo("./packed_boxes.csv")
 
