@@ -67,7 +67,7 @@ def Test_utils(boxes, algorithm_class, packer_class, rounds=100, low_box_num=20,
     # print(f"🔸 实际利用率 95%置信区间:      {avg_used_util:.4f} ± {conf_interval_used_util:.4f}")
 
 def save_packed_box(boxes):
-    with open("packed_boxes.csv", "w", newline="") as f:
+    with open("suctionPlanner/packed_boxes14.csv", "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["uid", "x", "y", "z", "l", "w", "h"])
         for uid, row in enumerate(boxes):
@@ -77,7 +77,7 @@ if __name__ == '__main__':
     # "./numBoxes25_pop5000_mut0.15_bitLen6_minDim150_maxDim800_step100/55bestBoxes0.7013.json"
     #  "./numBoxes25_pop5000_mut0.15_bitLen6_minDim150_maxDim800_step100/61bestBoxes0.7130.json"
     boxes = load_boxes_from_json(
-        "./result/2_0.8881_0.8881.json")
+        "./result/14_0.6231_9.61.json")
     rounds = 1
     is_random = False
     boxes = cluster_boxes(boxes, n_clusters=1)

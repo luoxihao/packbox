@@ -144,5 +144,5 @@ if __name__ == "__main__":
     pallet = Pallet(1600, 1000, 1800)
     suction_template = Box(800, 600, 1)
     planner = SuctionPlanner(pallet, suction_template)
-    planner.run_demo("./packed_boxes.csv")
+    planner.run_demo("./packed_boxes14.csv")
 
