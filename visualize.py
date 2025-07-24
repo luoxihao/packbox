@@ -72,6 +72,10 @@ def visualize_pallet_open3d(pallet, boxes, accessible_boxes_uid=None, suctions=N
             lineset = o3d.geometry.LineSet.create_from_axis_aligned_bounding_box(bbox)
             lineset.paint_uniform_color([0.1, 0.1, 0.1])  # 更深的边框色
             geometries.append(lineset)
+            # 局部坐标系
+            coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=200,origin=[0, 0, 0])  # 设置坐标系的尺寸
+            coordinate_frame.translate((x, y, z))  # 将坐标系放置在吸盘位置
+            geometries.append(coordinate_frame)
 
     # 4. 坐标系
     axis = o3d.geometry.TriangleMesh.create_coordinate_frame(

@@ -1,4 +1,7 @@
 import csv
+
+import numpy as np
+
 from dataclass import Pallet,Box
 from visualize import visualize_pallet_open3d
 from typing import List, Tuple
@@ -138,6 +141,30 @@ class SuctionPlanner:
             delete_uid = targets[0].id
             print(f"🗑️ 删除箱子 UID: {delete_uid}")
             boxes = [box for box in boxes if box.id != delete_uid]
+
+    def suction_sem2coordinate(self, suction: Box, target_box: Box):
+        # 计算吸盘的质心坐标（x, y 是底面中心，z 为底面高度）
+        x = suction.x + suction.l / 2.0
+        y = suction.y + suction.w / 2.0
+        z = suction.z
+
+        # 吸盘质心作为坐标系原点
+        s_o = np.array([x, y, z])
+
+        # 计算目标箱子的质心坐标
+        tx = target_box.x + target_box.l / 2.0
+        ty = target_box.y + target_box.w / 2.0
+        tz = target_box.z + target_box.h / 2.0
+        t_o = np.array([tx, ty, tz])
+
+        # 计算目标箱子质心在吸盘坐标系下的相对位置（平移向量）
+        t_s = t_o - s_o
+
+        # 返回值：
+        # 1. 吸盘的质心坐标 (x, y, z)
+        # 2. 吸盘是否旋转 90 度（用于后续姿态控制）
+        # 3. 目标箱子质心相对于吸盘坐标系的平移向量（元组格式）
+        return (x, y, z), suction.orientation == 90, tuple(t_s)
 
 
 if __name__ == "__main__":
