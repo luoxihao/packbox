@@ -79,7 +79,7 @@ class SuctionPlanner:
 
         for ori in [0, 90]:
             sl, sw = (self.suction_template.l, self.suction_template.w) if ori % 180 == 0 else (self.suction_template.w, self.suction_template.l)
-            tl, tw = (target_box.l, target_box.w) if ori % 180 == 0 else (target_box.w, target_box.l)
+            tl, tw = (target_box.l, target_box.w)
             if sl < tl and sw < tw:
                 suction = self.suction_template.copy()
                 suction.l, suction.w = sl, sw
@@ -92,7 +92,11 @@ class SuctionPlanner:
         corner_signs = [(-1, -1), (1, -1), (-1, 1), (1, 1)]
         for ori in [0, 90]:
             sl, sw = (self.suction_template.l, self.suction_template.w) if ori % 180 == 0 else (self.suction_template.w, self.suction_template.l)
-            tl, tw = (target_box.l, target_box.w) if ori % 180 == 0 else (target_box.w, target_box.l)
+            tl, tw = (target_box.l, target_box.w)
+
+            if not ((sl > sw and tl > tw) or (sw > sl and tw > tl)):
+                print("why!!!!!!!!")
+                continue
             for sx, sy in corner_signs:
                 suction = self.suction_template.copy()
                 suction.l, suction.w = sl, sw
@@ -102,9 +106,17 @@ class SuctionPlanner:
                 suction.y = corner_y - (sy + 1) * sw / 2
                 suction.z = target_top_z
                 suction.orientation = ori
+
+                # visualize_boxes = [(b.x, b.y, b.z, b.l, b.w, b.h, b.id) for b in all_boxes]
+                # visualize_suctions = [(suction.x, suction.y, suction.z, suction.l, suction.w, suction.h, suction.id)]
+                # visualize_pallet_open3d(self.pallet, visualize_boxes, accessible_boxes_uid=[target_box.id],
+                #                         suctions=visualize_suctions)
+
                 if self.has_touching_box_underneath(suction, others):
+                    print("under!!!!!!!!!")
                     continue
                 if not self.check_collision(suction, others):
+                    print("go!!!!!!!!")
                     return suction
 
         return None
