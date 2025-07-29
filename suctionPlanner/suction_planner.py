@@ -99,6 +99,7 @@ class SuctionPlanner:
                 continue
             for sx, sy in corner_signs:
                 suction = self.suction_template.copy()
+                suction.id = target_box.id
                 suction.l, suction.w = sl, sw
                 corner_x = target_box.x + (sx + 1) * tl / 2
                 corner_y = target_box.y + (sy + 1) * tw / 2

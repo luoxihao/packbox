@@ -3,12 +3,15 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import random
+from DataGenerator import DataGenerator
+from dataclass import Box,Pallet
+from suction_planner import SuctionPlanner
 
 # ---------------- 参数设置 ----------------
 MAX_BOXES = 5
 FEATURE_DIM = 3
 HEIGHTMAP_SHAPE = (16, 10)
-EPOCHS = 100  # 可根据需要改大
+EPOCHS = 1  # 可根据需要改大
 HIDDEN_DIM = 64
 PRINT_EVERY = 10
 MAX_STEPS=10
@@ -22,12 +25,13 @@ class BoxEnvWithDelayedReward:
         self.step_counter = 0
         self.heightmap = None
         self.available_boxes = []
+        self.suctions = []
         self.selected_sequence = []
 
     def reset(self):
         self.heightmap = self.get_heightmap_fn()
         self.selected_sequence = []
-        self.available_boxes = self.get_candidates_fn()
+        self.available_boxes,self.suctions = self.get_candidates_fn()
         if len(self.available_boxes)>5:
             self.available_boxes = random.sample(self.available_boxes,5)
         self.step_counter = 0
@@ -42,16 +46,24 @@ class BoxEnvWithDelayedReward:
     def step(self, action_idx):
         self.step_counter += 1
         box = self.available_boxes[action_idx]
+        suction = self.suctions[action_idx]
         #发出选择的箱子的位置和姿态
         self.selected_sequence.append(box)
 
 
         #更新环境状态
-        self.available_boxes = self.get_candidates_fn()
+        self.available_boxes ,self.suctions= self.get_candidates_fn()
+        # 没有获取到可以拿放的箱子
+        if self.available_boxes is None:
+            done = True
+            return (None, None, None),done
+
         if len(self.available_boxes)>5:
             self.available_boxes = random.sample(self.available_boxes,5)
         self.heightmap = self.get_heightmap_fn()
         done = len(self.available_boxes) == 0
+
+        #测试时使用 如果到maxstep就停止
         if self.max_steps is not None and self.step_counter >= self.max_steps:
             done = True
 
@@ -115,11 +127,65 @@ def get_heightmap():
 
 def total_volume_reward(sequence):
     return sum(np.prod(b) for b in sequence)
+''
+def box_transform(boxes_dict):
+    """
+    从相机得到的箱子数据转换为本地箱子数据格式
+    """
+    boxes=[]
+    for i in range(boxes_dict['num']):
+        l,w,h = boxes_dict['lwh'][i]
+        x,y,z = boxes_dict['robot_left_down'][i]
+        id = boxes_dict['id'][i]
+        box = Box(l,w,h,x,y,z,id)
+        boxes.append(box)
+    return boxes
 
+def randomNum_get_candidates():
+    boxes = box_transform(DataGenerator.generate_box_data(random.randint(1, 5)))
+
+    pallet = Pallet(1600, 1000, 1800)
+    suction_template = Box(800, 600, 1)
+    planner = SuctionPlanner(pallet, suction_template)
+
+    accessibles, uids = planner.find_accessible_boxes(boxes)
+    suctions = []
+    targets = []
+    for accessible in accessibles:
+        suction = planner.find_suction_position(accessible, boxes)
+        if suction:
+            suctions.append(suction)
+            targets.append(accessible)
+    if len(suctions) ==0:
+        return None,None
+    accessibles_npy = [np.array([box.l,box.w,box.h]) for box in targets]
+    return accessibles_npy,suctions
+# ------------- 选最大的主函数-------------
+def max_box_main():
+    env = BoxEnvWithDelayedReward(
+        get_candidates_fn=randomNum_get_candidates,
+        reward_fn=total_volume_reward,
+        get_heightmap_fn=get_heightmap,
+        max_steps=MAX_STEPS
+    )
+    result = env.reset()
+    boxes_np, heightmap_np, mask_np = result
+    done = False
+    while not done:
+        volumes = np.prod(boxes_np, axis=1)
+
+        # 找出最大体积对应的索引
+        max_idx = np.argmax(volumes)
+        action = max_idx
+        result, done = env.step(action)
+
+        if not done:
+            boxes_np, heightmap_np, mask_np = result
 # ---------------- 主函数 ----------------
 def main():
     env = BoxEnvWithDelayedReward(
-        get_candidates_fn=get_random_boxes,
+        # get_candidates_fn=get_random_boxes,
+        get_candidates_fn=randomNum_get_candidates,
         reward_fn=total_volume_reward,
         get_heightmap_fn=get_heightmap,
         max_steps=MAX_STEPS
@@ -161,4 +227,4 @@ def main():
             print(f"[Epoch {epoch}] Total reward = {reward:.3f}, Steps = {len(log_probs)}")
 
 if __name__ == "__main__":
-    main()
+    max_box_main()
