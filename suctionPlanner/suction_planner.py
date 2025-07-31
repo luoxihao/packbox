@@ -154,8 +154,8 @@ class SuctionPlanner:
             delete_uid = targets[0].id
             print(f"🗑️ 删除箱子 UID: {delete_uid}")
             boxes = [box for box in boxes if box.id != delete_uid]
-
-    def suction_sem2coordinate(self, suction: Box, target_box: Box):
+    @staticmethod
+    def suction_sem2coordinate(suction: Box, target_box: Box):
         # 计算吸盘的质心坐标（x, y 是底面中心，z 为底面高度）
         x = suction.x + suction.l / 2.0
         y = suction.y + suction.w / 2.0
@@ -182,7 +182,7 @@ class SuctionPlanner:
 
 if __name__ == "__main__":
     pallet = Pallet(1600, 1000, 1800)
-    suction_template = Box(800, 600, 1)
+    suction_template = Box(600, 800, 1)
     planner = SuctionPlanner(pallet, suction_template)
     planner.run_demo("./packed_boxes14.csv")
 

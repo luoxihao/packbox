@@ -6,7 +6,7 @@ import random
 from DataGenerator import DataGenerator
 from dataclass import Box,Pallet
 from suction_planner import SuctionPlanner
-
+from socket_communicate_template import ClientCommunicator
 # ---------------- 参数设置 ----------------
 MAX_BOXES = 5
 FEATURE_DIM = 3
@@ -25,13 +25,19 @@ class BoxEnvWithDelayedReward:
         self.step_counter = 0
         self.heightmap = None
         self.available_boxes = []
+        self.available_boxes_np = None
         self.suctions = []
         self.selected_sequence = []
+        self.client = ClientCommunicator()
+        self.client.connect_to_server()
 
     def reset(self):
         self.heightmap = self.get_heightmap_fn()
         self.selected_sequence = []
+
+        self.client.wait_for_request_from_server()
         self.available_boxes,self.suctions = self.get_candidates_fn()
+        self.available_boxes_np = [np.array([box.l, box.w, box.h]) for box in self.available_boxes]
         if len(self.available_boxes)>5:
             self.available_boxes = random.sample(self.available_boxes,5)
         self.step_counter = 0
@@ -39,19 +45,24 @@ class BoxEnvWithDelayedReward:
 
     def _get_state(self):
         pad = [np.zeros(FEATURE_DIM) for _ in range(MAX_BOXES - len(self.available_boxes))]
-        box_tensor = np.stack(self.available_boxes + pad)
-        mask = np.array([1 if i < len(self.available_boxes) else 0 for i in range(MAX_BOXES)])
+        box_tensor = np.stack(self.available_boxes_np + pad)
+        mask = np.array([1 if i < len(self.available_boxes_np) else 0 for i in range(MAX_BOXES)])
         return box_tensor, self.heightmap.copy(), mask
 
     def step(self, action_idx):
         self.step_counter += 1
         box = self.available_boxes[action_idx]
         suction = self.suctions[action_idx]
+
+        suction_coordinate,rotation,t_s = SuctionPlanner.suction_sem2coordinate(suction, box)
         #发出选择的箱子的位置和姿态
+        self.client.reply_depallet_calculation(box_size=[box.w,box.l,box.h] if rotation else [box.l,box.w,box.h],
+                                            start_coord=list(suction_coordinate),
+                                            start_euler_z=[-90 if rotation else 0,180,0],
+                                            position_offset=list(t_s))
         self.selected_sequence.append(box)
-
-
         #更新环境状态
+        self.client.wait_for_request_from_server()
         self.available_boxes ,self.suctions= self.get_candidates_fn()
         # 没有获取到可以拿放的箱子
         if self.available_boxes is None:
@@ -158,8 +169,8 @@ def randomNum_get_candidates():
             targets.append(accessible)
     if len(suctions) ==0:
         return None,None
-    accessibles_npy = [np.array([box.l,box.w,box.h]) for box in targets]
-    return accessibles_npy,suctions
+
+    return targets,suctions
 # ------------- 选最大的主函数-------------
 def max_box_main():
     env = BoxEnvWithDelayedReward(
