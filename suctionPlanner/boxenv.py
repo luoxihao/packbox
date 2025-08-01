@@ -171,6 +171,26 @@ def randomNum_get_candidates():
         return None,None
 
     return targets,suctions
+# --------------函数形式--仅获取箱子和返回所有可能的吸盘位置
+def get_all_suctions(boxes):
+    pallet = Pallet(1600, 1000, 1800)
+    suction_template = Box(800, 600, 1)
+    planner = SuctionPlanner(pallet, suction_template)
+
+    accessibles, uids = planner.find_accessible_boxes(boxes)
+    all_suctions = []
+    targets = []
+    for accessible in accessibles:
+        suctions = planner.find_suction_position_all(accessible, boxes)
+        if suctions:
+            all_suctions.extend(suctions)
+            targets.extend([accessible for _ in range(len(suctions))])
+    #
+    # for i in range(len(all_suctions)):
+    #     if targets[i].w>targets[i].l:
+    #         targets[i].l,targets[i].w = targets[i].w,targets[i].l
+    return targets,all_suctions
+
 # ------------- 选最大的主函数-------------
 def max_box_main():
     env = BoxEnvWithDelayedReward(
@@ -236,6 +256,19 @@ def main():
 
         if epoch % PRINT_EVERY == 0:
             print(f"[Epoch {epoch}] Total reward = {reward:.3f}, Steps = {len(log_probs)}")
-
+# ---------------- 测试函数 ----------------
+def test_get_all_suctions():
+    pallet = Pallet(1600, 1000, 1800)
+    suction_template = Box(600, 800, 1)
+    planner = SuctionPlanner(pallet, suction_template)
+    boxes = planner.load_boxes_from_csv("./packed_boxes14.csv")
+    while len(boxes)!=0:
+        targets, all_suctions = get_all_suctions(boxes)
+        if len(targets) == 0:
+            print("noooooooooooooooo")
+            break
+        remove_id = targets[0].id
+        boxes = [box for box in boxes if box.id != remove_id]
 if __name__ == "__main__":
-    max_box_main()
+    # max_box_main()
+    test_get_all_suctions()

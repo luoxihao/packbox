@@ -71,7 +71,7 @@ class SuctionPlanner:
                 if suction_box.xy_overlap(box):
                     return True
         return False
-
+    #找到匹配的就返回
     def find_suction_position(self, target_box: Box, all_boxes: List[Box]) -> Box:
         others = [b for b in all_boxes if b is not target_box]
         target_top_z = target_box.z_top()
@@ -121,6 +121,50 @@ class SuctionPlanner:
                     return suction
 
         return None
+    def find_suction_position_all(self, target_box: Box, all_boxes: List[Box]) -> List[Box]:
+        others = [b for b in all_boxes if b is not target_box]
+        target_top_z = target_box.z_top()
+        target_cx, target_cy = target_box.center()
+        suctions= []
+        for ori in [0, 90]:
+            sl, sw = (self.suction_template.l, self.suction_template.w) if ori % 180 == 0 else (self.suction_template.w, self.suction_template.l)
+            tl, tw = (target_box.l, target_box.w)
+            if sl < tl and sw < tw:
+                suction = self.suction_template.copy()
+                suction.l, suction.w = sl, sw
+                suction.set_center(target_cx, target_cy)
+                suction.z = target_top_z
+                suction.orientation = ori
+                if not self.check_collision(suction, others):
+                    return [suction]
+
+        corner_signs = [(-1, -1), (1, -1), (-1, 1), (1, 1)]
+        for ori in [0, 90]:
+            sl, sw = (self.suction_template.l, self.suction_template.w) if ori % 180 == 0 else (self.suction_template.w, self.suction_template.l)
+            tl, tw = (target_box.l, target_box.w)
+
+            if not ((sl > sw and tl > tw) or (sw > sl and tw > tl)):
+                print("why!!!!!!!!")
+                continue
+            for sx, sy in corner_signs:
+                suction = self.suction_template.copy()
+                suction.id = target_box.id
+                suction.l, suction.w = sl, sw
+                corner_x = target_box.x + (sx + 1) * tl / 2
+                corner_y = target_box.y + (sy + 1) * tw / 2
+                suction.x = corner_x - (sx + 1) * sl / 2
+                suction.y = corner_y - (sy + 1) * sw / 2
+                suction.z = target_top_z
+                suction.orientation = ori
+                suction.corner=(corner_x,corner_y)
+                if self.has_touching_box_underneath(suction, others):
+                    print("under!!!!!!!!!")
+                    continue
+                if not self.check_collision(suction, others):
+                    print("go!!!!!!!!")
+                    suctions.append(suction)
+
+        return suctions
     def get_accessible_target(self,boxes):
         accessibles, uids = self.find_accessible_boxes(boxes)
         suctions = []
@@ -172,7 +216,13 @@ class SuctionPlanner:
 
         # 计算目标箱子质心在吸盘坐标系下的相对位置（平移向量）
         t_s = t_o - s_o
-
+        if suction.orientation == 90:
+            R_xy_cw = np.array([
+                [0, 1, 0],
+                [-1, 0, 0],
+                [0, 0, 1]
+            ])
+            t_s = R_xy_cw @ t_s
         # 返回值：
         # 1. 吸盘的质心坐标 (x, y, z)
         # 2. 吸盘是否旋转 90 度（用于后续姿态控制）

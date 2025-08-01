@@ -8,10 +8,11 @@
 
 import random
 from typing import List, Tuple, Dict
-
+from dataclass import Box
+import csv
 class DataGenerator:
     def __init__(self):
-        pass
+        self.loaded_boxes=[]
     @staticmethod
     def generate_box_data(num_boxes: int) -> Dict:
         """
@@ -48,7 +49,20 @@ class DataGenerator:
             box_data["robot_left_down"].append((rx, ry, rz))
 
         return box_data
-
+    def load_boxes_from_csv(self, csv_path: str) -> List[Box]:
+        boxes = []
+        with open(csv_path, 'r', newline='') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                box = Box(
+                    l=float(row['l']), w=float(row['w']), h=float(row['h']),
+                    x=float(row['x']), y=float(row['y']), z=float(row['z']),
+                    box_id=int(row['uid'])
+                )
+                boxes.append(box)
+        return boxes
+    def remove_loade_boxes(self, uid):
+        self.loaded_boxes = [box for box in self.loaded_boxes if box.id != uid]
 # 示例调用
 if __name__ == "__main__":
     generator = DataGenerator()

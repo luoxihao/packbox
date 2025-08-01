@@ -8,6 +8,7 @@ class Box:
         self.z = z  # 左下角 z
         self.id = box_id  # 可选：箱子编号
         self.orientation=0
+        self.corner=None
 
     def orientations(self):
         """返回该箱子的两个旋转方向（长宽互换）"""
