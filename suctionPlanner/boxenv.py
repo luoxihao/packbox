@@ -264,9 +264,13 @@ def test_get_all_suctions():
     boxes = planner.load_boxes_from_csv("./packed_boxes14.csv")
     while len(boxes)!=0:
         targets, all_suctions = get_all_suctions(boxes)
+        for i in range(len(targets)):
+            #这个是要获取的
+            suction_xyz,rotation_or_not,box_offset= planner.suction_sem2coordinate(all_suctions[i],targets[i])
         if len(targets) == 0:
             print("noooooooooooooooo")
             break
+        #我自己随机删除一个
         remove_id = targets[0].id
         boxes = [box for box in boxes if box.id != remove_id]
 if __name__ == "__main__":
