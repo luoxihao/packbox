@@ -10,14 +10,15 @@ class SuctionPlanner:
         self.pallet = pallet
         self.suction_template = suction_template
 
-    def load_boxes_from_csv(self, csv_path: str) -> List[Box]:
+    def load_boxes_from_csv(self, csv_path: str,resize=False) -> List[Box]:
+        factor = 1 if not resize else 100
         boxes = []
         with open(csv_path, 'r', newline='') as f:
             reader = csv.DictReader(f)
             for row in reader:
                 box = Box(
-                    l=float(row['l']), w=float(row['w']), h=float(row['h']),
-                    x=float(row['x']), y=float(row['y']), z=float(row['z']),
+                    l=float(row['l'])*factor, w=float(row['w'])*factor, h=float(row['h'])*factor,
+                    x=float(row['x'])*factor, y=float(row['y'])*factor, z=float(row['z'])*factor,
                     box_id=int(row['uid'])
                 )
                 boxes.append(box)
@@ -90,10 +91,15 @@ class SuctionPlanner:
         for ori in [0, 90]:
             sl, sw = (self.suction_template.l, self.suction_template.w) if ori % 180 == 0 else (self.suction_template.w, self.suction_template.l)
             tl, tw = (target_box.l, target_box.w)
-
-            if not ((sl > sw and tl > tw) or (sw > sl and tw > tl)):
-                print("uid", target_box.id, "at rotation", ori, "not long to long short to short")
+            eps = 1e-6
+            # 如果目标箱子是正方形，直接通过
+            if abs(tl - tw) <= eps:
+                pass
+            # 如果长短边方向匹配才通过
+            elif not ((sl > sw and tl > tw) or (sw > sl and tw > tl)):
+                print("uid", target_box.id, "at rotation", ori, "not long-to-long short-to-short")
                 continue
+
             for sx, sy in corner_signs:
                 suction = self.suction_template.copy()
                 suction.id = target_box.id
