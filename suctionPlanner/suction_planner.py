@@ -33,41 +33,38 @@ class SuctionPlanner:
         return accessible_boxes, accessible_uids
 
     def check_collision(self, candidate_box: Box, boxes: List[Box]) -> bool:
-        orientation = candidate_box.orientation % 360
-        cl, cw = (candidate_box.l, candidate_box.w) if orientation in [0, 180] else (candidate_box.w, candidate_box.l)
-        half_l, half_w = cl / 2.0, cw / 2.0
-        cx, cy, cz = candidate_box.x, candidate_box.y, candidate_box.z
-        cand_x_min = cx - half_l
-        cand_x_max = cx + half_l
-        cand_y_min = cy - half_w
-        cand_y_max = cy + half_w
-        cand_z_min = cz
-        cand_z_max = cz + candidate_box.h
+        eps = 1e-9  # 数值稳定性(可按需要调大/调小)
+
+        # 候选吸盘 AABB（x,y,z 为最小角）
+        ori = getattr(candidate_box, 'orientation', 0) % 360
+        # cl, cw = (candidate_box.l, candidate_box.w) if ori in (0, 180) else (candidate_box.w, candidate_box.l)
+        cl,cw = (candidate_box.l, candidate_box.w)
+        cx_min, cy_min, cz_min = candidate_box.x, candidate_box.y, candidate_box.z
+        cx_max, cy_max, cz_max = cx_min + cl, cy_min + cw, cz_min + candidate_box.h
 
         for box in boxes:
             if box is candidate_box:
                 continue
+
             borient = getattr(box, 'orientation', 0) % 360
-            bl, bw = (box.l, box.w) if borient in [0, 180] else (box.w, box.l)
-            half_bl, half_bw = bl / 2.0, bw / 2.0
-            bx = box.x + box.l / 2.0
-            by = box.y + box.w / 2.0
-            bz = box.z
-            box_x_min = bx - half_bl
-            box_x_max = bx + half_bl
-            box_y_min = by - half_bw
-            box_y_max = by + half_bw
-            box_z_min = bz
-            box_z_max = bz + box.h
-            if (cand_x_min < box_x_max and cand_x_max > box_x_min and
-                cand_y_min < box_y_max and cand_y_max > box_y_min and
-                cand_z_min < box_z_max and cand_z_max > box_z_min):
-                return True
-        return False
+            bl, bw = (box.l, box.w) if borient in (0, 180) else (box.w, box.l)
+            bx_min, by_min, bz_min = box.x, box.y, box.z
+            bx_max, by_max, bz_max = bx_min + bl, by_min + bw, bz_min + box.h
+
+            # 分离轴“不重叠”条件（任一轴分离即不相交；贴边：<= / >= 视为不相交）
+            separated = (
+                    cx_max <= bx_min + eps or cx_min >= bx_max - eps or
+                    cy_max <= by_min + eps or cy_min >= by_max - eps or
+                    cz_max <= bz_min + eps or cz_min >= bz_max - eps
+            )
+            if not separated:
+                return True  # 存在重叠 -> 碰撞
+
+        return False  # 无任何重叠 -> 不碰撞（贴边也算不碰撞）
 
     def has_touching_box_underneath(self, suction_box: Box, boxes: List[Box]) -> bool:
         for box in boxes:
-            if box.z_top() >= suction_box.z:
+            if box.z_top() == suction_box.z:
                 if suction_box.xy_overlap(box):
                     return True
         return False
@@ -95,7 +92,7 @@ class SuctionPlanner:
             tl, tw = (target_box.l, target_box.w)
 
             if not ((sl > sw and tl > tw) or (sw > sl and tw > tl)):
-                print("why!!!!!!!!")
+                print("uid", target_box.id, "at rotation", ori, "not long to long short to short")
                 continue
             for sx, sy in corner_signs:
                 suction = self.suction_template.copy()
@@ -114,11 +111,12 @@ class SuctionPlanner:
                 #                         suctions=visualize_suctions)
 
                 if self.has_touching_box_underneath(suction, others):
-                    print("under!!!!!!!!!")
+                    print("uid",target_box.id,"in ",sx,sy,"has_touching_box_underneath")
                     continue
                 if not self.check_collision(suction, others):
-                    print("go!!!!!!!!")
                     return suction
+                print("uid", target_box.id, "in ", sx, sy, "has_collision")
+
 
         return None
     def find_suction_position_all(self, target_box: Box, all_boxes: List[Box]) -> List[Box]:
@@ -144,7 +142,7 @@ class SuctionPlanner:
             tl, tw = (target_box.l, target_box.w)
 
             if not ((sl > sw and tl > tw) or (sw > sl and tw > tl)):
-                print("why!!!!!!!!")
+                print("uid", target_box.id, "at rotation", ori, "not long to long short to short")
                 continue
             for sx, sy in corner_signs:
                 suction = self.suction_template.copy()
@@ -158,11 +156,12 @@ class SuctionPlanner:
                 suction.orientation = ori
                 suction.corner=(corner_x,corner_y)
                 if self.has_touching_box_underneath(suction, others):
-                    print("under!!!!!!!!!")
+                    print("uid",target_box.id,"in ",sx,sy,"has_touching_box_underneath")
                     continue
                 if not self.check_collision(suction, others):
-                    print("go!!!!!!!!")
                     suctions.append(suction)
+                print("uid", target_box.id, "in ", sx, sy, "has_collision")
+
 
         return suctions
     def get_accessible_target(self,boxes):

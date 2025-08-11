@@ -1,61 +1,80 @@
 class Box:
-    def __init__(self, l, w, h, x=0.0, y=0.0, z=0.0, box_id=None):
-        self.l = l
-        self.w = w
+    def __init__(self, l, w, h, x=0.0, y=0.0, z=0.0, box_id=None, orientation=0):
+        self.l = l  # 原始长度（沿x）
+        self.w = w  # 原始宽度（沿y）
         self.h = h
-        self.x = x  # 左下角 x
-        self.y = y  # 左下角 y
-        self.z = z  # 左下角 z
-        self.id = box_id  # 可选：箱子编号
-        self.orientation=0
+        self.x = x  # 最小角 x（世界坐标）
+        self.y = y  # 最小角 y（世界坐标）
+        self.z = z  # 最小角 z
+        self.id = box_id
+        self.orientation = orientation % 360  # 朝向(度数)
 
-    def orientations(self):
-        """返回该箱子的两个旋转方向（长宽互换）"""
-        return [(self.l, self.w, self.h), (self.w, self.l, self.h)]
+    # ------------------------------
+    # 尺寸相关（考虑旋转）
+    # ------------------------------
+    @property
+    def lx(self):
+        """旋转后沿世界 x 方向的尺寸"""
+        return self.l if self.orientation in (0, 180) else self.w
 
-    def key(self):
-        """唯一标识一个尺寸"""
-        return (self.l, self.w, self.h)
+    @property
+    def ly(self):
+        """旋转后沿世界 y 方向的尺寸"""
+        return self.w if self.orientation in (0, 180) else self.l
 
-    def volume(self):
-        return self.l * self.w * self.h
-
+    # ------------------------------
+    # 范围 & 中心
+    # ------------------------------
     def x_range(self):
-        return self.x, self.x + self.l
+        return self.x, self.x + self.lx
 
     def y_range(self):
-        return self.y, self.y + self.w
+        return self.y, self.y + self.ly
 
     def z_top(self):
         return self.z + self.h
+
+    def center(self):
+        return self.x + self.lx / 2.0, self.y + self.ly / 2.0
+
     def set_center(self, cx, cy):
-        self.x = cx - self.l / 2.0
-        self.y = cy - self.w / 2.0
-    def xy_overlap(self, other):
-        """判断两个箱子在 xy 平面是否有重叠"""
+        """设置旋转后中心到(cx, cy)"""
+        self.x = cx - self.lx / 2.0
+        self.y = cy - self.ly / 2.0
+
+    # ------------------------------
+    # 重叠 & 覆盖判断
+    # ------------------------------
+    def xy_overlap(self, other, eps: float = 1e-9):
+        """判断两个箱子在XY平面是否有重叠（贴边不算重叠）"""
         ax1, ax2 = self.x_range()
         ay1, ay2 = self.y_range()
         bx1, bx2 = other.x_range()
         by1, by2 = other.y_range()
 
-        return (ax1 < bx2 and bx1 < ax2) and (ay1 < by2 and by1 < ay2)
+        separated = (
+            ax2 <= bx1 + eps or ax1 >= bx2 - eps or
+            ay2 <= by1 + eps or ay1 >= by2 - eps
+        )
+        return not separated
 
-    def is_covered_by(self, other):
-        # 条件1：XY平面投影有重叠
-        if not self.xy_overlap(other):
+    def is_covered_by(self, other, eps: float = 1e-9):
+        """判断当前箱子是否被另一个箱子覆盖"""
+        if not self.xy_overlap(other, eps):
             return False
-        # 条件2：other箱子的底部不在self箱子下面（确保比较的是上方箱子）
-        if other.z < self.z:
+        if other.z < self.z - eps:
             return False
-        # 条件3：other箱子的底部位置在self箱子顶面之下或持平
-        return other.z <= self.z_top()
+        return other.z <= self.z_top() + eps
+
+    # ------------------------------
+    # 其他工具
+    # ------------------------------
     def copy(self):
-        return Box(self.l, self.w, self.h, self.x, self.y, self.z, self.id)
+        return Box(self.l, self.w, self.h, self.x, self.y, self.z, self.id, self.orientation)
 
     def __repr__(self):
-        return f"Box(id={self.id}, pos=({self.x:.2f}, {self.y:.2f}, {self.z:.2f}), size=({self.l:.2f}, {self.w:.2f}, {self.h:.2f}))"
-    def center(self):
-        return self.x + self.l / 2, self.y + self.w / 2
+        return (f"Box(id={self.id}, pos=({self.x:.2f}, {self.y:.2f}, {self.z:.2f}), "
+                f"size=({self.lx:.2f}, {self.ly:.2f}, {self.h:.2f}), ori={self.orientation})")
 
 # ------------------------------
 # Pallet 类
