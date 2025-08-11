@@ -147,8 +147,13 @@ class SuctionPlanner:
             sl, sw = (self.suction_template.l, self.suction_template.w) if ori % 180 == 0 else (self.suction_template.w, self.suction_template.l)
             tl, tw = (target_box.l, target_box.w)
 
-            if not ((sl > sw and tl > tw) or (sw > sl and tw > tl)):
-                print("uid", target_box.id, "at rotation", ori, "not long to long short to short")
+            eps = 1e-6
+            # 如果目标箱子是正方形，直接通过
+            if abs(tl - tw) <= eps:
+                pass
+            # 如果长短边方向匹配才通过
+            elif not ((sl > sw and tl > tw) or (sw > sl and tw > tl)):
+                print("uid", target_box.id, "at rotation", ori, "not long-to-long short-to-short")
                 continue
             for sx, sy in corner_signs:
                 suction = self.suction_template.copy()
@@ -181,7 +186,7 @@ class SuctionPlanner:
                 targets.append(accessible)
         return suctions,targets
     def run_demo(self, csv_path: str):
-        boxes = self.load_boxes_from_csv(csv_path)
+        boxes = self.load_boxes_from_csv(csv_path,True)
         while boxes:
             accessibles, uids = self.find_accessible_boxes(boxes)
             suctions = []
@@ -237,7 +242,7 @@ class SuctionPlanner:
 
 if __name__ == "__main__":
     pallet = Pallet(1600, 1000, 1800)
-    suction_template = Box(600, 800, 1)
+    suction_template = Box(700, 800, 1)
     planner = SuctionPlanner(pallet, suction_template)
-    planner.run_demo("./packed_boxes14.csv")
+    planner.run_demo("./packed_boxes26.csv")
 

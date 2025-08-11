@@ -7,6 +7,8 @@ from DataGenerator import DataGenerator
 from dataclass import Box,Pallet
 from suction_planner import SuctionPlanner
 from socket_communicate_template import ClientCommunicator
+from visualize import visualize_pallet_open3d
+
 # ---------------- 参数设置 ----------------
 MAX_BOXES = 5
 FEATURE_DIM = 3
@@ -174,7 +176,7 @@ def randomNum_get_candidates():
 # --------------函数形式--仅获取箱子和返回所有可能的吸盘位置
 def get_all_suctions(boxes):
     pallet = Pallet(1600, 1000, 1800)
-    suction_template = Box(800, 600, 1)
+    suction_template = Box(800, 700, 1)
     planner = SuctionPlanner(pallet, suction_template)
 
     accessibles, uids = planner.find_accessible_boxes(boxes)
@@ -259,11 +261,14 @@ def main():
 # ---------------- 测试函数 ----------------
 def test_get_all_suctions():
     pallet = Pallet(1600, 1000, 1800)
-    suction_template = Box(600, 800, 1)
+    suction_template = Box(700, 800, 1)
     planner = SuctionPlanner(pallet, suction_template)
-    boxes = planner.load_boxes_from_csv("./packed_boxes14.csv")
+    boxes = planner.load_boxes_from_csv("./packed_boxes26.csv",True)
     while len(boxes)!=0:
         targets, all_suctions = get_all_suctions(boxes)
+        visualize_boxes = [(b.x, b.y, b.z, b.l, b.w, b.h, b.id) for b in boxes]
+        visualize_suctions = [(s.x, s.y, s.z, s.l, s.w, s.h, s.id) for s in all_suctions]
+        visualize_pallet_open3d(pallet, visualize_boxes, accessible_boxes_uid=[b.id for b in targets], suctions=visualize_suctions)
         for i in range(len(targets)):
             #这个是要获取的
             suction_xyz,rotation_or_not,box_offset= planner.suction_sem2coordinate(all_suctions[i],targets[i])
